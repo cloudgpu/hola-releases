@@ -1,47 +1,28 @@
-# Hola 0.5.0 Release Notes
+# Hola 0.5.1 Release Notes
 
-Released 2026-06-15.
+Released 2026-06-20.
 
-This is the first public binary release of Hola, distributed through the
-`cloudgpu/hola-releases` repository. It ships Debian/Ubuntu packages, Fedora/RPM
-packages, Arch packages, and a generic Linux tarball for `x86_64`.
+This is a bug-fix release for the Hola binary distribution.
 
-## What is new in 0.5.0
+## Bug fixes
 
-* Initial public release of the Hola agent runtime and reference applications.
+* Fixed `hola-chat` in the Zsh plugin so that `hola-coder` errors are
+  surfaced instead of being silently discarded. Previously, when no model
+  endpoint was configured, the command would return an empty response.
+* Fixed `_hola_run_with_spinner` so the background process exit code is
+  preserved instead of being lost when stderr is not a TTY.
+
+## What is new in 0.5.x
+
+* First public binary release of the Hola agent runtime and reference
+  applications.
 * Production-readiness pass for the C11 core, including AddressSanitizer CI,
   hardened SSE endpoints, and improved verification loops.
-* New `session_search` tool for querying persisted agent sessions.
-* Approval callbacks so agent actions can pause for human confirmation.
-* Release automation that builds Linux packages in Docker sandboxes and
-  publishes them to GitHub Releases.
+* `session_search` tool for querying persisted agent sessions.
+* Approval callbacks for high-risk actions.
 
-## Improvements
-
-* Provider abstraction now supports any OpenAI-compatible endpoint, including
-  Ollama.
-* Tool registry loads plugins without recompiling the agent.
-* Session persistence uses SQLite and survives across restarts.
-* Retry engine and error classification are more robust under transient
-  failures.
-
-## Packaging
-
-* Debian/Ubuntu `.deb` for amd64.
-* Fedora/RPM `.rpm` for x86_64.
-* Arch Linux `.pkg.tar.zst` for x86_64.
-* Generic Linux tarball (`hola-0.5.0-linux-amd64.tar.gz`).
-
-Install the latest release with:
+## Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 ```
-
-On Windows, use WSL with the same installer; a native Windows zip is planned
-for a future release.
-
-## Source
-
-Hola is developed in the private `cloudgpu/hola-ai-agent` repository. Binary
-releases are published here for users and downstream packagers.
