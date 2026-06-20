@@ -1,17 +1,18 @@
-# Hola 0.5.4 Release Notes
+# Hola 0.5.5 Release Notes
 
 Released 2026-06-20.
 
 ## Bug fixes
 
-* Fixed the Arch Linux package so the `hola-coder` and `hola-admin`
-  symlinks in `/usr/bin` are actually included. Previously the package
-  builder only archived regular files and dropped the symlinks, so the
-  commands were not on PATH after `pacman -U`.
+* `hola-coder` now auto-detects its installed plugin directory when
+  `HOLA_PLUGIN_DIR` is not set. Previously it only looked in `./plugins`
+  relative to the current working directory, so users who installed the
+  package had to set `HOLA_PLUGIN_DIR` manually before it could write or
+  edit files.
 
 ## What you get
 
-* `hola-coder` — agentic coding assistant
+* `hola-coder` — agentic coding assistant (now loads its plugins automatically)
 * `hola-admin` — system administration helper
 * `hola-suggest`, `hola-explain`, `hola-chat` — Zsh plugin functions
 * `:HolaExplain`, `:HolaFix`, `:HolaSuggest` — Vim/Neovim plugin commands
@@ -22,5 +23,8 @@ Released 2026-06-20.
 curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 ```
 
-After installing on Arch, run `rehash` in your current Zsh session (or open
-a new terminal) so the shell discovers `hola-coder` and `hola-admin`.
+After installing, run `rehash` in Zsh (or open a new terminal) and then:
+
+```sh
+hola-coder "write a hello world python program"
+```
