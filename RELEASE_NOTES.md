@@ -1,20 +1,19 @@
-# Hola 0.5.6 Release Notes
+# Hola 0.5.7 Release Notes
 
 Released 2026-06-20.
 
 ## Bug fixes
 
-* `hola-coder` now auto-detects its installed plugin directory when
-  `HOLA_PLUGIN_DIR` is not set. Previously it only looked in `./plugins`
-  relative to the current working directory, so users who installed the
-  package had to set `HOLA_PLUGIN_DIR` manually before it could write or
-  edit files.
-* Silenced harmless compiler warnings about ignored `getcwd` return values
-  in the `hola-zsh` and `hola-vim` example plugins.
+* `hola-coder` now reports the correct version (`0.5.7`) instead of the
+  hard-coded placeholder `0.1.0`. The version is now passed from the top-level
+  `Makefile` at build time.
+* `hola-admin` now supports `--version`, `--help`, and `--list-tools` (`-l`)
+  so you can verify the install and inspect available diagnostic tools without
+  starting a full agent run.
 
 ## What you get
 
-* `hola-coder` — agentic coding assistant (now loads its plugins automatically)
+* `hola-coder` — agentic coding assistant (loads plugins automatically)
 * `hola-admin` — system administration helper
 * `hola-suggest`, `hola-explain`, `hola-chat` — Zsh plugin functions
 * `:HolaExplain`, `:HolaFix`, `:HolaSuggest` — Vim/Neovim plugin commands
