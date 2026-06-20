@@ -2,12 +2,13 @@
 # Cross-platform installer for Hola binaries.
 # Downloads prebuilt packages from the public Hola releases repo.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.1.0)
+#   HOLA_VERSION            release version to install (default: 0.5.3)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
+#   HOLA_ENABLE_ZSH         auto-enable zsh plugin by sourcing it in ~/.zshrc (default: 1)
 
 set -e
 
@@ -37,6 +38,58 @@ detect_linux_distro() {
     fi
 }
 
+_hola_enable_zsh() {
+    local prefix="$1"
+    local zshrc="${HOME}/.zshrc"
+
+    if [ "${HOLA_ENABLE_ZSH:-1}" = "0" ]; then
+        return
+    fi
+
+    if [ ! -f "$zshrc" ]; then
+        echo ""
+        echo "Zsh plugin available at:"
+        echo "  source ${prefix}/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh"
+        return
+    fi
+
+    if grep -q "hola-zsh.plugin.zsh" "$zshrc" 2>/dev/null; then
+        echo ""
+        echo "Hola Zsh plugin is already enabled in ~/.zshrc."
+        return
+    fi
+
+    echo "" >> "$zshrc"
+    echo "# Hola Zsh plugin (hola-suggest, hola-explain, hola-chat)" >> "$zshrc"
+    echo "source ${prefix}/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh" >> "$zshrc"
+    echo ""
+    echo "Enabled Hola Zsh plugin in ~/.zshrc."
+    echo "Run 'source ~/.zshrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
+}
+
+_hola_print_next_steps() {
+    local prefix="$1"
+    local bin_dir="$2"
+
+    echo ""
+    echo "Hola ${VERSION} installed successfully."
+    echo ""
+    echo "Command-line tools available in: $bin_dir"
+    echo "  hola-coder  — agentic coding assistant"
+    echo "  hola-admin  — system administration helper"
+    echo ""
+    echo "Zsh plugin functions (after enabling):"
+    echo "  hola-suggest  — get an editable command suggestion"
+    echo "  hola-explain  — explain the last command"
+    echo "  hola-chat     — context-aware shell chat"
+    echo ""
+    echo "To use coding plugins with hola-coder, set:"
+    echo "  HOLA_PLUGIN_DIR=${prefix}/foundation_apps/hola-coder/plugins"
+    echo ""
+    echo "To use the Neovim plugin, add to your init.vim/init.lua:"
+    echo "  source ${prefix}/foundation_apps/hola-vim/plugin/hola.vim"
+}
+
 install_deb() {
     local pkg="hola_${VERSION}_${DEB_ARCH}.deb"
     local url="${BASE_URL}/${pkg}"
@@ -48,6 +101,8 @@ install_deb() {
         echo "Fixing dependencies with apt-get..."
         $SUDO apt-get install -f -y || true
     fi
+    _hola_print_next_steps "/opt/hola" "/usr/bin"
+    _hola_enable_zsh "/opt/hola"
 }
 
 install_rpm() {
@@ -68,6 +123,8 @@ install_rpm() {
         echo "Installing with rpm..."
         $SUDO rpm -Uvh "${TMPDIR}/${pkg}"
     fi
+    _hola_print_next_steps "/opt/hola" "/usr/bin"
+    _hola_enable_zsh "/opt/hola"
 }
 
 install_arch_pkg() {
@@ -77,6 +134,8 @@ install_arch_pkg() {
     curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
     echo "Installing with pacman..."
     $SUDO pacman -U --noconfirm "${TMPDIR}/${pkg}"
+    _hola_print_next_steps "/opt/hola" "/usr/bin"
+    _hola_enable_zsh "/opt/hola"
 }
 
 install_tarball() {
@@ -140,12 +199,6 @@ install_tarball() {
         $SUDO chmod +x "$PREFIX/foundation_apps/hola-zsh/scripts/hola-parse.py"
     fi
 
-    echo ""
-    echo "Hola ${VERSION} installed successfully."
-    echo "Command-line tools are available in: $BIN_DIR"
-    echo "  hola-coder  — agentic coding assistant"
-    echo "  hola-admin  — system administration helper"
-
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
         echo ""
         echo "$BIN_DIR is not on your PATH. Add it with:"
@@ -156,12 +209,8 @@ install_tarball() {
         esac
     fi
 
-    echo ""
-    echo "To enable the zsh plugin, add the following to your ~/.zshrc:"
-    echo "  source $PREFIX/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh"
-    echo ""
-    echo "To enable the Neovim plugin, add to your init.vim/init.lua:"
-    echo "  source $PREFIX/foundation_apps/hola-vim/plugin/hola.vim"
+    _hola_print_next_steps "$PREFIX" "$BIN_DIR"
+    _hola_enable_zsh "$PREFIX"
 }
 
 if ! command -v curl >/dev/null 2>&1; then
