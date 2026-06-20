@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.7}"
+VERSION="${HOLA_VERSION:-0.5.8}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -41,6 +41,7 @@ detect_linux_distro() {
 _hola_enable_zsh() {
     local prefix="$1"
     local zshrc="${HOME}/.zshrc"
+    local plugin_path="${prefix}/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh"
 
     if [ "${HOLA_ENABLE_ZSH:-1}" = "0" ]; then
         return
@@ -49,19 +50,28 @@ _hola_enable_zsh() {
     if [ ! -f "$zshrc" ]; then
         echo ""
         echo "Zsh plugin available at:"
-        echo "  source ${prefix}/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh"
+        echo "  source ${plugin_path}"
         return
     fi
 
+    # If a hola-zsh source line already exists (possibly from a source build or
+    # an old install path), replace it so upgrades keep the plugin working.
     if grep -q "hola-zsh.plugin.zsh" "$zshrc" 2>/dev/null; then
-        echo ""
-        echo "Hola Zsh plugin is already enabled in ~/.zshrc."
+        if grep -qF "source ${plugin_path}" "$zshrc" 2>/dev/null; then
+            echo ""
+            echo "Hola Zsh plugin is already enabled in ~/.zshrc."
+        else
+            sed -i "s|source .*hola-zsh\.plugin\.zsh|source ${plugin_path}|" "$zshrc"
+            echo ""
+            echo "Updated Hola Zsh plugin path in ~/.zshrc to ${plugin_path}."
+            echo "Run 'source ~/.zshrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
+        fi
         return
     fi
 
     echo "" >> "$zshrc"
     echo "# Hola Zsh plugin (hola-suggest, hola-explain, hola-chat)" >> "$zshrc"
-    echo "source ${prefix}/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh" >> "$zshrc"
+    echo "source ${plugin_path}" >> "$zshrc"
     echo ""
     echo "Enabled Hola Zsh plugin in ~/.zshrc."
     echo "Run 'source ~/.zshrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."

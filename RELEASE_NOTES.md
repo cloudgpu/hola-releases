@@ -1,15 +1,15 @@
-# Hola 0.5.7 Release Notes
+# Hola 0.5.8 Release Notes
 
 Released 2026-06-20.
 
 ## Bug fixes
 
-* `hola-coder` now reports the correct version (`0.5.7`) instead of the
-  hard-coded placeholder `0.1.0`. The version is now passed from the top-level
-  `Makefile` at build time.
-* `hola-admin` now supports `--version`, `--help`, and `--list-tools` (`-l`)
-  so you can verify the install and inspect available diagnostic tools without
-  starting a full agent run.
+* `scripts/install.sh` now updates an existing `hola-zsh.plugin.zsh` source line
+  in `~/.zshrc` when the install prefix changes (for example, upgrading from a
+  source build to a package install, or moving between `/opt/hola` and
+  `~/.local/hola`). Previously the installer left a stale source path in place,
+  so `hola-suggest`, `hola-explain`, and `hola-chat` failed to load after an
+  upgrade.
 
 ## What you get
 
