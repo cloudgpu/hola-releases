@@ -1,24 +1,27 @@
-# Hola 0.5.2 Release Notes
+# Hola 0.5.3 Release Notes
 
 Released 2026-06-20.
 
-## Bug fixes
+## Packaging changes
 
-* Fixed the Zsh plugin so a stale `HOLA_BIN` path (e.g. an old source build
-  directory) is automatically replaced with a working `hola-coder` binary.
-  The plugin now searches, in order: the sibling source build directory,
-  `hola-coder` on `PATH`, `/opt/hola/foundation_apps/hola-coder/bin/hola-coder`,
-  and `/usr/local/bin/hola-coder`.
-* Suppressed job-control messages (`[2] 3893631`, `+ exit 127`) that appeared
-  in interactive shells while the spinner was running.
+* Removed the `hola-agent` demo binary from the install package.
+  Only the two user-facing command-line tools are installed now:
+  * `hola-coder` — agentic coding assistant
+  * `hola-admin` — system administration helper
 
-## Recent changes in 0.5.x
+## Recent fixes
 
+* 0.5.2 — automatic fallback for stale `HOLA_BIN` paths and suppression of
+  job-control messages in the Zsh plugin.
 * 0.5.1 — surfaced `hola-coder` errors instead of silently discarding stderr.
-* 0.5.0 — first public binary release of the Hola agent runtime.
+* 0.5.0 — first public binary release.
 
 ## Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 ```
+
+After installing, make sure you have an OpenAI-compatible endpoint set
+(`OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, or `OPENAI_API_KEY`) and run either
+`hola-coder` or `hola-admin`.

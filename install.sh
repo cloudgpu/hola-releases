@@ -11,7 +11,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.2}"
+VERSION="${HOLA_VERSION:-0.5.3}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -133,7 +133,6 @@ install_tarball() {
     $SUDO cp -R -p "${TMPDIR}/opt/hola/." "$PREFIX/"
 
     $SUDO mkdir -p "$BIN_DIR"
-    $SUDO ln -sf "$PREFIX/hola_core/bin/hola-agent" "$BIN_DIR/hola-agent"
     $SUDO ln -sf "$PREFIX/foundation_apps/hola-admin/bin/hola-admin" "$BIN_DIR/hola-admin"
     $SUDO ln -sf "$PREFIX/foundation_apps/hola-coder/bin/hola-coder" "$BIN_DIR/hola-coder"
 
@@ -143,7 +142,9 @@ install_tarball() {
 
     echo ""
     echo "Hola ${VERSION} installed successfully."
-    echo "Binaries are available in: $BIN_DIR"
+    echo "Command-line tools are available in: $BIN_DIR"
+    echo "  hola-coder  — agentic coding assistant"
+    echo "  hola-admin  — system administration helper"
 
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
         echo ""
