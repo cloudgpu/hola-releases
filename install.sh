@@ -88,6 +88,11 @@ _hola_print_next_steps() {
     echo ""
     echo "To use the Neovim plugin, add to your init.vim/init.lua:"
     echo "  source ${prefix}/foundation_apps/hola-vim/plugin/hola.vim"
+    echo ""
+    echo "If your shell cannot find hola-coder/hola-admin yet, run:"
+    echo "  rehash        # Zsh"
+    echo "  hash -r       # Bash"
+    echo "or open a new terminal."
 }
 
 install_deb() {
