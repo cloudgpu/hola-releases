@@ -1,6 +1,13 @@
-# Hola 0.5.8 Release Notes
+# Hola 0.5.9 Release Notes
 
 Released 2026-06-20.
+
+## New features
+
+* Added Bash support for the terminal plugin. Zsh users still get
+  `hola-suggest`, `hola-explain`, and `hola-chat`; Bash users now get the same
+  three functions via `hola-bash.sh`. The installer detects `~/.bashrc` and
+  enables the plugin automatically.
 
 ## Bug fixes
 
@@ -15,7 +22,7 @@ Released 2026-06-20.
 
 * `hola-coder` — agentic coding assistant (loads plugins automatically)
 * `hola-admin` — system administration helper
-* `hola-suggest`, `hola-explain`, `hola-chat` — Zsh plugin functions
+* `hola-suggest`, `hola-explain`, `hola-chat` — Zsh/Bash plugin functions
 * `:HolaExplain`, `:HolaFix`, `:HolaSuggest` — Vim/Neovim plugin commands
 
 ## Install

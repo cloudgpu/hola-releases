@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.8}"
+VERSION="${HOLA_VERSION:-0.5.9}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -77,6 +77,44 @@ _hola_enable_zsh() {
     echo "Run 'source ~/.zshrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
 }
 
+_hola_enable_bash() {
+    local prefix="$1"
+    local bashrc="${HOME}/.bashrc"
+    local plugin_path="${prefix}/foundation_apps/hola-zsh/plugin/hola-bash.sh"
+
+    if [ "${HOLA_ENABLE_BASH:-1}" = "0" ]; then
+        return
+    fi
+
+    if [ ! -f "$bashrc" ]; then
+        echo ""
+        echo "Bash plugin available at:"
+        echo "  source ${plugin_path}"
+        return
+    fi
+
+    # Update an existing stale source path on upgrade.
+    if grep -q "hola-bash.sh" "$bashrc" 2>/dev/null; then
+        if grep -qF "source ${plugin_path}" "$bashrc" 2>/dev/null; then
+            echo ""
+            echo "Hola Bash plugin is already enabled in ~/.bashrc."
+        else
+            sed -i "s|source .*hola-bash\.sh|source ${plugin_path}|" "$bashrc"
+            echo ""
+            echo "Updated Hola Bash plugin path in ~/.bashrc to ${plugin_path}."
+            echo "Run 'source ~/.bashrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
+        fi
+        return
+    fi
+
+    echo "" >> "$bashrc"
+    echo "# Hola Bash plugin (hola-suggest, hola-explain, hola-chat)" >> "$bashrc"
+    echo "source ${plugin_path}" >> "$bashrc"
+    echo ""
+    echo "Enabled Hola Bash plugin in ~/.bashrc."
+    echo "Run 'source ~/.bashrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
+}
+
 _hola_print_next_steps() {
     local prefix="$1"
     local bin_dir="$2"
@@ -88,7 +126,7 @@ _hola_print_next_steps() {
     echo "  hola-coder  — agentic coding assistant"
     echo "  hola-admin  — system administration helper"
     echo ""
-    echo "Zsh plugin functions (after enabling):"
+    echo "Zsh/Bash plugin functions (after enabling):"
     echo "  hola-suggest  — get an editable command suggestion"
     echo "  hola-explain  — explain the last command"
     echo "  hola-chat     — context-aware shell chat"
@@ -226,6 +264,7 @@ install_tarball() {
 
     _hola_print_next_steps "$PREFIX" "$BIN_DIR"
     _hola_enable_zsh "$PREFIX"
+    _hola_enable_bash "$PREFIX"
 }
 
 if ! command -v curl >/dev/null 2>&1; then
