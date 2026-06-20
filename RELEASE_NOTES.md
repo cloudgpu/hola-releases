@@ -1,25 +1,21 @@
-# Hola 0.5.1 Release Notes
+# Hola 0.5.2 Release Notes
 
 Released 2026-06-20.
 
-This is a bug-fix release for the Hola binary distribution.
-
 ## Bug fixes
 
-* Fixed `hola-chat` in the Zsh plugin so that `hola-coder` errors are
-  surfaced instead of being silently discarded. Previously, when no model
-  endpoint was configured, the command would return an empty response.
-* Fixed `_hola_run_with_spinner` so the background process exit code is
-  preserved instead of being lost when stderr is not a TTY.
+* Fixed the Zsh plugin so a stale `HOLA_BIN` path (e.g. an old source build
+  directory) is automatically replaced with a working `hola-coder` binary.
+  The plugin now searches, in order: the sibling source build directory,
+  `hola-coder` on `PATH`, `/opt/hola/foundation_apps/hola-coder/bin/hola-coder`,
+  and `/usr/local/bin/hola-coder`.
+* Suppressed job-control messages (`[2] 3893631`, `+ exit 127`) that appeared
+  in interactive shells while the spinner was running.
 
-## What is new in 0.5.x
+## Recent changes in 0.5.x
 
-* First public binary release of the Hola agent runtime and reference
-  applications.
-* Production-readiness pass for the C11 core, including AddressSanitizer CI,
-  hardened SSE endpoints, and improved verification loops.
-* `session_search` tool for querying persisted agent sessions.
-* Approval callbacks for high-risk actions.
+* 0.5.1 — surfaced `hola-coder` errors instead of silently discarding stderr.
+* 0.5.0 — first public binary release of the Hola agent runtime.
 
 ## Install
 
