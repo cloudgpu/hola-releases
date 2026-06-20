@@ -1,20 +1,20 @@
-# Hola 0.5.3 Release Notes
+# Hola 0.5.4 Release Notes
 
 Released 2026-06-20.
 
-## Packaging changes
+## Bug fixes
 
-* Removed the `hola-agent` demo binary from the install package.
-  Only the two user-facing command-line tools are installed now:
-  * `hola-coder` — agentic coding assistant
-  * `hola-admin` — system administration helper
+* Fixed the Arch Linux package so the `hola-coder` and `hola-admin`
+  symlinks in `/usr/bin` are actually included. Previously the package
+  builder only archived regular files and dropped the symlinks, so the
+  commands were not on PATH after `pacman -U`.
 
-## Recent fixes
+## What you get
 
-* 0.5.2 — automatic fallback for stale `HOLA_BIN` paths and suppression of
-  job-control messages in the Zsh plugin.
-* 0.5.1 — surfaced `hola-coder` errors instead of silently discarding stderr.
-* 0.5.0 — first public binary release.
+* `hola-coder` — agentic coding assistant
+* `hola-admin` — system administration helper
+* `hola-suggest`, `hola-explain`, `hola-chat` — Zsh plugin functions
+* `:HolaExplain`, `:HolaFix`, `:HolaSuggest` — Vim/Neovim plugin commands
 
 ## Install
 
@@ -22,6 +22,5 @@ Released 2026-06-20.
 curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 ```
 
-After installing, make sure you have an OpenAI-compatible endpoint set
-(`OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, or `OPENAI_API_KEY`) and run either
-`hola-coder` or `hola-admin`.
+After installing on Arch, run `rehash` in your current Zsh session (or open
+a new terminal) so the shell discovers `hola-coder` and `hola-admin`.
