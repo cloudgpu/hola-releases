@@ -1,0 +1,208 @@
+#!/bin/sh
+# Cross-platform installer for Hola binaries.
+# Downloads prebuilt packages from the public Hola releases repo.
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/scripts/install.sh | sh
+# Environment variables:
+#   HOLA_VERSION            release version to install (default: 0.1.0)
+#   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
+#   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
+#   HOLA_BIN_DIR            where to symlink executables for tar installs
+
+set -e
+
+VERSION="${HOLA_VERSION:-0.5.0}"
+RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
+BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
+
+MACHINE=$(uname -m)
+case "$MACHINE" in
+    x86_64|amd64) ARCH=x86_64; DEB_ARCH=amd64; TAR_ARCH=amd64 ;;
+    arm64|aarch64) ARCH=arm64; DEB_ARCH=arm64; TAR_ARCH=arm64 ;;
+    *) echo "Unsupported architecture: $MACHINE" >&2; exit 1 ;;
+esac
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+fi
+
+detect_linux_distro() {
+    if [ -r /etc/os-release ]; then
+        # shellcheck source=/dev/null
+        . /etc/os-release
+        echo "$ID ${ID_LIKE:-}"
+    else
+        echo "unknown"
+    fi
+}
+
+install_deb() {
+    local pkg="hola_${VERSION}_${DEB_ARCH}.deb"
+    local url="${BASE_URL}/${pkg}"
+    echo "Downloading Debian package ${pkg}..."
+    curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
+    echo "Installing with dpkg..."
+    $SUDO dpkg -i "${TMPDIR}/${pkg}" || true
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "Fixing dependencies with apt-get..."
+        $SUDO apt-get install -f -y || true
+    fi
+}
+
+install_rpm() {
+    local pkg="hola-${VERSION}-1.${ARCH}.rpm"
+    local url="${BASE_URL}/${pkg}"
+    echo "Downloading RPM package ${pkg}..."
+    curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
+    if command -v dnf >/dev/null 2>&1; then
+        echo "Installing with dnf..."
+        $SUDO dnf install -y "${TMPDIR}/${pkg}"
+    elif command -v yum >/dev/null 2>&1; then
+        echo "Installing with yum..."
+        $SUDO yum install -y "${TMPDIR}/${pkg}"
+    elif command -v zypper >/dev/null 2>&1; then
+        echo "Installing with zypper..."
+        $SUDO zypper install -y "${TMPDIR}/${pkg}"
+    else
+        echo "Installing with rpm..."
+        $SUDO rpm -Uvh "${TMPDIR}/${pkg}"
+    fi
+}
+
+install_arch_pkg() {
+    local pkg="hola-${VERSION}-1-${ARCH}.pkg.tar.zst"
+    local url="${BASE_URL}/${pkg}"
+    echo "Downloading Arch package ${pkg}..."
+    curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
+    echo "Installing with pacman..."
+    $SUDO pacman -U --noconfirm "${TMPDIR}/${pkg}"
+}
+
+install_tarball() {
+    local os="$1"
+    local pkg="hola-${VERSION}-${os}-${TAR_ARCH}.tar.gz"
+    local url="${BASE_URL}/${pkg}"
+
+    if [ -n "${HOLA_INSTALL_PREFIX:-}" ]; then
+        PREFIX="$HOLA_INSTALL_PREFIX"
+    elif [ "$(id -u)" -eq 0 ] || [ -w /opt ]; then
+        PREFIX="/opt/hola"
+    else
+        PREFIX="${HOME}/.local/hola"
+    fi
+
+    if [ -n "${HOLA_BIN_DIR:-}" ]; then
+        BIN_DIR="$HOLA_BIN_DIR"
+    elif [ "$PREFIX" = "/opt/hola" ]; then
+        BIN_DIR="/usr/local/bin"
+    else
+        BIN_DIR="${HOME}/.local/bin"
+    fi
+
+    if [ ! -w "$(dirname "$PREFIX")" ] || { [ -e "$PREFIX" ] && [ ! -w "$PREFIX" ]; }; then
+        if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+        fi
+    fi
+
+    echo "Downloading ${pkg}..."
+    if ! curl -fsSL "$url" -o "${TMPDIR}/${pkg}"; then
+        echo "Failed to download ${url}" >&2
+        echo "This platform may not have a prebuilt binary yet." >&2
+        echo "Request one at https://github.com/${RELEASES_REPO}/issues" >&2
+        exit 1
+    fi
+
+    echo "Extracting..."
+    tar -xzf "${TMPDIR}/${pkg}" -C "$TMPDIR"
+
+    if [ ! -d "${TMPDIR}/opt/hola" ]; then
+        echo "Tarball layout unexpected: missing opt/hola" >&2
+        exit 1
+    fi
+
+    if [ -d "$PREFIX" ]; then
+        echo "Backing up existing installation to ${PREFIX}.bak..."
+        $SUDO rm -rf "${PREFIX}.bak"
+        $SUDO mv "$PREFIX" "${PREFIX}.bak"
+    fi
+
+    echo "Installing Hola to ${PREFIX}..."
+    $SUDO mkdir -p "$PREFIX"
+    $SUDO cp -R -p "${TMPDIR}/opt/hola/." "$PREFIX/"
+
+    $SUDO mkdir -p "$BIN_DIR"
+    $SUDO ln -sf "$PREFIX/hola_core/bin/hola-agent" "$BIN_DIR/hola-agent"
+    $SUDO ln -sf "$PREFIX/foundation_apps/hola-admin/bin/hola-admin" "$BIN_DIR/hola-admin"
+    $SUDO ln -sf "$PREFIX/foundation_apps/hola-coder/bin/hola-coder" "$BIN_DIR/hola-coder"
+
+    if [ -f "$PREFIX/foundation_apps/hola-zsh/scripts/hola-parse.py" ]; then
+        $SUDO chmod +x "$PREFIX/foundation_apps/hola-zsh/scripts/hola-parse.py"
+    fi
+
+    echo ""
+    echo "Hola ${VERSION} installed successfully."
+    echo "Binaries are available in: $BIN_DIR"
+
+    if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
+        echo ""
+        echo "$BIN_DIR is not on your PATH. Add it with:"
+        echo "  export PATH=\"$BIN_DIR:\$PATH\""
+        case "${SHELL##*/}" in
+            zsh) echo "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc" ;;
+            bash) echo "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc" ;;
+        esac
+    fi
+
+    echo ""
+    echo "To enable the zsh plugin, add the following to your ~/.zshrc:"
+    echo "  source $PREFIX/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh"
+    echo ""
+    echo "To enable the Neovim plugin, add to your init.vim/init.lua:"
+    echo "  source $PREFIX/foundation_apps/hola-vim/plugin/hola.vim"
+}
+
+if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required but not installed." >&2
+    exit 1
+fi
+
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+OS=$(uname -s)
+case "$OS" in
+    Linux)
+        DISTRO=$(detect_linux_distro)
+        case "$DISTRO" in
+            *debian*|*ubuntu*|*mint*|*pop*)
+                install_deb
+                ;;
+            *fedora*|*rhel*|*centos*|*rocky*|*alma*|*opensuse*|*suse*)
+                install_rpm
+                ;;
+            *arch*|*manjaro*)
+                install_arch_pkg
+                ;;
+            *)
+                echo "No native package for this distro. Falling back to tarball."
+                install_tarball linux
+                ;;
+        esac
+        ;;
+    Darwin)
+        install_tarball darwin
+        ;;
+    FreeBSD)
+        install_tarball freebsd
+        ;;
+    *)
+        echo "Unsupported operating system: $OS" >&2
+        echo "Request a binary at https://github.com/${RELEASES_REPO}/issues" >&2
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "Done."
