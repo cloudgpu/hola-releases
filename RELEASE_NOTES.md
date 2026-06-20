@@ -1,4 +1,4 @@
-# Hola 0.5.5 Release Notes
+# Hola 0.5.6 Release Notes
 
 Released 2026-06-20.
 
@@ -9,6 +9,8 @@ Released 2026-06-20.
   relative to the current working directory, so users who installed the
   package had to set `HOLA_PLUGIN_DIR` manually before it could write or
   edit files.
+* Silenced harmless compiler warnings about ignored `getcwd` return values
+  in the `hola-zsh` and `hola-vim` example plugins.
 
 ## What you get
 
