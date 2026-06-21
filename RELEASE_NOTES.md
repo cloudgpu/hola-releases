@@ -1,16 +1,16 @@
-# Hola 0.5.11 Release Notes
+# Hola 0.5.15 Release Notes
 
 Released 2026-06-21.
 
 ## Bug fixes
 
-* `hola-coder --continue` now works as expected:
-  * Every run prints its session id so you know what to continue.
-  * `hola-coder --list-sessions` lists recent sessions.
-  * Continuing an unknown session fails with a clear error instead of silently
-    starting a fresh default task.
-  * The task-plan tool now labels its ids as `Task ID:` to avoid confusion with
-    session ids.
+* Fixed heap corruption caused by unchecked `snprintf` growth in several
+  components:
+  * `hola-coder` tool output formatting (`coder_tools` plugin).
+  * Context compression in the core agent loop.
+  * System prompt and environment hint builders in `prompt_builder.c`.
+  These changes eliminate random crashes such as
+  `*** buffer overflow detected ***` and `double free or corruption`.
 
 ## What you get
 

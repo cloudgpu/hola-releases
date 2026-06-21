@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.5.14)
+#   HOLA_VERSION            release version to install (default: 0.5.15)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.14}"
+VERSION="${HOLA_VERSION:-0.5.15}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -156,6 +156,7 @@ install_deb() {
     fi
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
+    _hola_enable_bash "/opt/hola"
 }
 
 install_rpm() {
@@ -178,6 +179,7 @@ install_rpm() {
     fi
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
+    _hola_enable_bash "/opt/hola"
 }
 
 install_arch_pkg() {
@@ -189,6 +191,7 @@ install_arch_pkg() {
     $SUDO pacman -U --noconfirm "${TMPDIR}/${pkg}"
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
+    _hola_enable_bash "/opt/hola"
 }
 
 install_tarball() {
