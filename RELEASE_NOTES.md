@@ -1,22 +1,16 @@
-# Hola 0.5.9 Release Notes
+# Hola 0.5.11 Release Notes
 
-Released 2026-06-20.
-
-## New features
-
-* Added Bash support for the terminal plugin. Zsh users still get
-  `hola-suggest`, `hola-explain`, and `hola-chat`; Bash users now get the same
-  three functions via `hola-bash.sh`. The installer detects `~/.bashrc` and
-  enables the plugin automatically.
+Released 2026-06-21.
 
 ## Bug fixes
 
-* `scripts/install.sh` now updates an existing `hola-zsh.plugin.zsh` source line
-  in `~/.zshrc` when the install prefix changes (for example, upgrading from a
-  source build to a package install, or moving between `/opt/hola` and
-  `~/.local/hola`). Previously the installer left a stale source path in place,
-  so `hola-suggest`, `hola-explain`, and `hola-chat` failed to load after an
-  upgrade.
+* `hola-coder --continue` now works as expected:
+  * Every run prints its session id so you know what to continue.
+  * `hola-coder --list-sessions` lists recent sessions.
+  * Continuing an unknown session fails with a clear error instead of silently
+    starting a fresh default task.
+  * The task-plan tool now labels its ids as `Task ID:` to avoid confusion with
+    session ids.
 
 ## What you get
 
@@ -31,8 +25,4 @@ Released 2026-06-20.
 curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 ```
 
-After installing, run `rehash` in Zsh (or open a new terminal) and then:
-
-```sh
-hola-coder "write a hello world python program"
-```
+After installing, run `rehash` in Zsh or open a new terminal.
