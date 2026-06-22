@@ -1,19 +1,13 @@
-# Hola 0.5.16 Release Notes
+# Hola 0.5.17 Release Notes
 
 Released 2026-06-22.
 
-## What's new
+## Bug fixes
 
-* Added support for the `OPENAI_MODEL` environment variable. Model selection
-  now follows this precedence:
-  1. `HOLA_MODEL`
-  2. `OPENAI_MODEL`
-  3. `OLLAMA_MODEL`
-  4. Built-in default
-
-  This makes it easier to configure OpenAI-compatible providers with the
-  conventional `OPENAI_*` variable set (`OPENAI_BASE_URL`, `OPENAI_API_KEY`,
-  `OPENAI_MODEL`).
+* Fixed a segmentation fault during context compression (`--step` mode and
+  long sessions). `hola_session_db_rotate_session()` now checks for NULL
+  titles returned by SQLite before calling `strdup()`.
+* Hardened `session_db.c` against NULL values in other JSON-export paths.
 
 ## What you get
 
