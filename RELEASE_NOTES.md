@@ -1,16 +1,19 @@
-# Hola 0.5.15 Release Notes
+# Hola 0.5.16 Release Notes
 
-Released 2026-06-21.
+Released 2026-06-22.
 
-## Bug fixes
+## What's new
 
-* Fixed heap corruption caused by unchecked `snprintf` growth in several
-  components:
-  * `hola-coder` tool output formatting (`coder_tools` plugin).
-  * Context compression in the core agent loop.
-  * System prompt and environment hint builders in `prompt_builder.c`.
-  These changes eliminate random crashes such as
-  `*** buffer overflow detected ***` and `double free or corruption`.
+* Added support for the `OPENAI_MODEL` environment variable. Model selection
+  now follows this precedence:
+  1. `HOLA_MODEL`
+  2. `OPENAI_MODEL`
+  3. `OLLAMA_MODEL`
+  4. Built-in default
+
+  This makes it easier to configure OpenAI-compatible providers with the
+  conventional `OPENAI_*` variable set (`OPENAI_BASE_URL`, `OPENAI_API_KEY`,
+  `OPENAI_MODEL`).
 
 ## What you get
 
