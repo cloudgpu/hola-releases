@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.5.17)
+#   HOLA_VERSION            release version to install (default: 0.5.18)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.17}"
+VERSION="${HOLA_VERSION:-0.5.18}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -250,10 +250,6 @@ install_tarball() {
     $SUDO mkdir -p "$BIN_DIR"
     $SUDO ln -sf "$PREFIX/foundation_apps/hola-admin/bin/hola-admin" "$BIN_DIR/hola-admin"
     $SUDO ln -sf "$PREFIX/foundation_apps/hola-coder/bin/hola-coder" "$BIN_DIR/hola-coder"
-
-    if [ -f "$PREFIX/foundation_apps/hola-zsh/scripts/hola-parse.py" ]; then
-        $SUDO chmod +x "$PREFIX/foundation_apps/hola-zsh/scripts/hola-parse.py"
-    fi
 
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
         echo ""
