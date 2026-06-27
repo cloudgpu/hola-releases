@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.5.23)
+#   HOLA_VERSION            release version to install (default: 0.5.24)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.23}"
+VERSION="${HOLA_VERSION:-0.5.24}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -143,9 +143,30 @@ _hola_print_next_steps() {
     echo "or open a new terminal."
 }
 
+glibc_version() {
+    # Extract the glibc version from ldd (first line: "ldd (GNU libc) 2.31").
+    ldd --version 2>/dev/null | head -n1 | sed -n 's/.*[^0-9.]\([0-9]\+\.[0-9]\+\).*/\1/p'
+}
+
 install_deb() {
     local pkg="hola_${VERSION}_${DEB_ARCH}.deb"
     local url="${BASE_URL}/${pkg}"
+
+    # Older glibc containers/distros need the Ubuntu 20.04 (glibc 2.31) build.
+    local glibc
+    glibc=$(glibc_version)
+    if [ -n "$glibc" ] && [ "$(printf '%s\n2.38\n' "$glibc" | sort -V | head -n1)" = "$glibc" ] && [ "$glibc" != "2.38" ]; then
+        local legacy_pkg="hola_${VERSION}_${DEB_ARCH}-ubuntu20.04.deb"
+        local legacy_url="${BASE_URL}/${legacy_pkg}"
+        echo "glibc ${glibc} detected; trying legacy package ${legacy_pkg}..."
+        if curl -fsSL "$legacy_url" -o "${TMPDIR}/${legacy_pkg}"; then
+            pkg="$legacy_pkg"
+            url="$legacy_url"
+        else
+            echo "Legacy package not available, falling back to standard package."
+        fi
+    fi
+
     echo "Downloading Debian package ${pkg}..."
     curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
     echo "Installing with dpkg..."
