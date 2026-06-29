@@ -1,6 +1,6 @@
-# Hola 0.5.24 Release Notes
+# Hola 0.5.25 Release Notes
 
-Released 2026-06-27.
+Released 2026-06-29.
 
 ## Bug fixes
 
