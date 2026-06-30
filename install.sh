@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.5.27)
+#   HOLA_VERSION            release version to install (default: 0.5.28)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.27}"
+VERSION="${HOLA_VERSION:-0.5.28}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -131,8 +131,9 @@ _hola_print_next_steps() {
     echo "  hola-explain  — explain the last command"
     echo "  hola-chat     — context-aware shell chat"
     echo ""
-    echo "To use coding plugins with hola-coder, set:"
+    echo "To load C plugins (shared by hola-coder and hola-admin), set:"
     echo "  HOLA_PLUGIN_DIR=${prefix}/foundation_apps/hola-coder/plugins"
+    echo "hola-admin also auto-discovers that directory when installed side-by-side."
     echo ""
     echo "To use the Neovim plugin, add to your init.vim/init.lua:"
     echo "  source ${prefix}/foundation_apps/hola-vim/plugin/hola.vim"
