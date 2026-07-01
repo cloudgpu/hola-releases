@@ -4,7 +4,7 @@
 # Usage:
 #   Invoke-Expression (Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/cloudgpu/hola-releases/main/scripts/install.ps1' -UseBasicParsing).Content
 param(
-    [string]$Version = ($env:HOLA_VERSION -or '0.5.29'),
+    [string]$Version = ($env:HOLA_VERSION -or '0.5.30'),
     [string]$ReleasesRepo = ($env:HOLA_RELEASES_REPO -or 'cloudgpu/hola-releases'),
     [string]$InstallDir = ($env:HOLA_INSTALL_DIR -or "$env:LOCALAPPDATA\hola")
 )
