@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.5.35)
+#   HOLA_VERSION            release version to install (default: 0.5.38)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.5.35}"
+VERSION="${HOLA_VERSION:-0.5.38}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -171,7 +171,7 @@ install_deb() {
     echo "Downloading Debian package ${pkg}..."
     curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
     echo "Installing with dpkg..."
-    $SUDO dpkg -i "${TMPDIR}/${pkg}" || true
+    $SUDO dpkg -i --force-overwrite "${TMPDIR}/${pkg}" || true
     if command -v apt-get >/dev/null 2>&1; then
         echo "Fixing dependencies with apt-get..."
         $SUDO apt-get install -f -y || true
@@ -182,7 +182,10 @@ install_deb() {
 }
 
 install_rpm() {
-    local pkg="hola-${VERSION}-1.${ARCH}.rpm"
+    # RPM uses the kernel architecture name (x86_64, aarch64).
+    local rpm_arch
+    rpm_arch=$(uname -m)
+    local pkg="hola-${VERSION}-1.${rpm_arch}.rpm"
     local url="${BASE_URL}/${pkg}"
     echo "Downloading RPM package ${pkg}..."
     curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
@@ -205,12 +208,17 @@ install_rpm() {
 }
 
 install_arch_pkg() {
-    local pkg="hola-${VERSION}-1-${ARCH}.pkg.tar.zst"
+    # pacman uses the kernel architecture name (x86_64, aarch64).
+    local pacman_arch
+    pacman_arch=$(uname -m)
+    local pkg="hola-${VERSION}-1-${pacman_arch}.pkg.tar.zst"
     local url="${BASE_URL}/${pkg}"
     echo "Downloading Arch package ${pkg}..."
     curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
     echo "Installing with pacman..."
-    $SUDO pacman -U --noconfirm "${TMPDIR}/${pkg}"
+    # --overwrite '*' allows the package to replace files left behind by
+    # previous manual or tarball installs of Hola.
+    $SUDO pacman -U --noconfirm --overwrite '*' "${TMPDIR}/${pkg}"
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
     _hola_enable_bash "/opt/hola"
