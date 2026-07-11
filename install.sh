@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.6.1)
+#   HOLA_VERSION            release version to install (default: 0.6.2)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.6.1}"
+VERSION="${HOLA_VERSION:-0.6.2}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -125,6 +125,7 @@ _hola_print_next_steps() {
     echo "Command-line tools available in: $bin_dir"
     echo "  hola-coder  — agentic coding assistant"
     echo "  hola-admin  — system administration helper"
+    echo "  hola-prompt — prompt engineering helper"
     echo ""
     echo "Zsh/Bash plugin functions (after enabling):"
     echo "  hola-suggest  — get an editable command suggestion"
@@ -138,7 +139,7 @@ _hola_print_next_steps() {
     echo "To use the Neovim plugin, add to your init.vim/init.lua:"
     echo "  source ${prefix}/foundation_apps/hola-vim/plugin/hola.vim"
     echo ""
-    echo "If your shell cannot find hola-coder/hola-admin yet, run:"
+    echo "If your shell cannot find hola-coder/hola-admin/hola-prompt yet, run:"
     echo "  rehash        # Zsh"
     echo "  hash -r       # Bash"
     echo "or open a new terminal."
@@ -280,6 +281,7 @@ install_tarball() {
     $SUDO mkdir -p "$BIN_DIR"
     $SUDO ln -sf "$PREFIX/foundation_apps/hola-admin/bin/hola-admin" "$BIN_DIR/hola-admin"
     $SUDO ln -sf "$PREFIX/foundation_apps/hola-coder/bin/hola-coder" "$BIN_DIR/hola-coder"
+    $SUDO ln -sf "$PREFIX/foundation_apps/hola-prompt/bin/hola-prompt" "$BIN_DIR/hola-prompt"
 
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
         echo ""
