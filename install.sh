@@ -4,15 +4,17 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.6.8)
+#   HOLA_VERSION            release version to install (default: 0.6.9)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
 #   HOLA_ENABLE_ZSH         auto-enable zsh plugin by sourcing it in ~/.zshrc (default: 1)
+#   HOLA_ENABLE_BASH        auto-enable bash plugin in ~/.bashrc (default: 1)
+#   HOLA_SKIP_CODESIGN      1 to skip macOS ad-hoc codesign (default: 0)
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.6.8}"
+VERSION="${HOLA_VERSION:-0.6.9}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -38,6 +40,147 @@ detect_linux_distro() {
     fi
 }
 
+_hola_sed_inplace() {
+    # Portable sed -i: GNU sed accepts -i, BSD/macOS needs -i ''.
+    local expr="$1"
+    local file="$2"
+    if sed --version >/dev/null 2>&1; then
+        sed -i "$expr" "$file"
+    else
+        sed -i '' "$expr" "$file"
+    fi
+}
+
+_hola_ensure_rc_export() {
+    # Ensure export VAR=value is present in a shell rc file.
+    local rc="$1"
+    local marker="$2"
+    local comment="$3"
+    local export_line="$4"
+
+    [ -n "$rc" ] || return 0
+    touch "$rc" 2>/dev/null || return 0
+
+    if grep -qF "$marker" "$rc" 2>/dev/null; then
+        if ! grep -qF "$export_line" "$rc" 2>/dev/null; then
+            _hola_sed_inplace "s|export ${marker}=.*|${export_line}|" "$rc"
+            echo "Updated ${marker} in ${rc}."
+        fi
+        return 0
+    fi
+
+    printf '\n%s\n%s\n' "$comment" "$export_line" >> "$rc"
+    echo "Enabled ${marker} in ${rc}."
+}
+
+_hola_setup_plugins() {
+    # Wire plugin discovery for hola-coder/hola-admin:
+    #   1) HOLA_PLUGIN_DIR in ~/.zshrc and ~/.bashrc
+    #   2) ~/.hola/plugins -> <prefix>/foundation_apps/hola-coder/plugins
+    #      (fallback when env is unset — IDEs, non-interactive shells)
+    local prefix="$1"
+    local plugin_dir="${prefix}/foundation_apps/hola-coder/plugins"
+    local hola_home="${HOLA_HOME:-${HOME}/.hola}"
+    local user_link="${hola_home}/plugins"
+
+    if [ ! -d "$plugin_dir" ]; then
+        echo "Warning: plugin directory missing: ${plugin_dir}" >&2
+        return 0
+    fi
+
+    _hola_ensure_rc_export "${HOME}/.zshrc" "HOLA_PLUGIN_DIR" \
+        "# Hola coder C plugins (tools)" \
+        "export HOLA_PLUGIN_DIR=\"${plugin_dir}\""
+    _hola_ensure_rc_export "${HOME}/.bashrc" "HOLA_PLUGIN_DIR" \
+        "# Hola coder C plugins (tools)" \
+        "export HOLA_PLUGIN_DIR=\"${plugin_dir}\""
+
+    mkdir -p "$hola_home" 2>/dev/null || true
+    if [ -L "$user_link" ] || [ ! -e "$user_link" ]; then
+        ln -sfn "$plugin_dir" "$user_link"
+        echo "Linked ${user_link} -> ${plugin_dir}"
+    elif [ -d "$user_link" ]; then
+        echo "Note: ${user_link} exists as a directory (not replaced)."
+    else
+        echo "Warning: cannot create ${user_link}" >&2
+    fi
+}
+
+_hola_fix_permissions() {
+    # Ensure binaries/plugins are executable and macOS Gatekeeper will run them.
+    local prefix="$1"
+    local bin_dir="$2"
+
+    if [ ! -d "$prefix" ]; then
+        return 0
+    fi
+
+    echo "Fixing execute permissions under ${prefix}..."
+    # shellcheck disable=SC2038
+    find "$prefix" -type f \( -name 'hola-*' -o -name '*.so' -o -name '*.dylib' \) \
+        -exec chmod a+rx {} + 2>/dev/null || true
+    find "$prefix/foundation_apps" -type f -path '*/bin/*' \
+        -exec chmod a+rx {} + 2>/dev/null || true
+
+    case "$(uname -s)" in
+        Darwin)
+            if command -v xattr >/dev/null 2>&1; then
+                echo "Clearing Gatekeeper quarantine xattrs..."
+                xattr -cr "$prefix" 2>/dev/null || true
+                for name in hola-admin hola-coder hola-prompt hola-update; do
+                    [ -e "${bin_dir}/${name}" ] && xattr -c "${bin_dir}/${name}" 2>/dev/null || true
+                done
+            fi
+            if [ "${HOLA_SKIP_CODESIGN:-0}" != "1" ] && command -v codesign >/dev/null 2>&1; then
+                echo "Ad-hoc codesigning Mach-O binaries (local trust)..."
+                # shellcheck disable=SC2038
+                find "$prefix" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print 2>/dev/null \
+                    | while IFS= read -r f; do
+                        [ -n "$f" ] || continue
+                        if file "$f" 2>/dev/null | grep -q 'Mach-O'; then
+                            codesign --force --sign - "$f" 2>/dev/null || true
+                        fi
+                    done
+            fi
+            ;;
+    esac
+}
+
+_hola_install_update_helper() {
+    # Install scripts/hola-update (or fetch from releases repo) into BIN_DIR.
+    local prefix="$1"
+    local bin_dir="$2"
+    local dest_prefix_bin="${prefix}/bin/hola-update"
+    local dest_link="${bin_dir}/hola-update"
+    local src=""
+    local script_dir
+    script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd) || script_dir=""
+
+    if [ -n "$script_dir" ] && [ -f "${script_dir}/hola-update" ]; then
+        src="${script_dir}/hola-update"
+    elif [ -f "${prefix}/bin/hola-update" ]; then
+        src="${prefix}/bin/hola-update"
+    else
+        # Fetch companion script from the same releases repo as install.sh.
+        local url="https://raw.githubusercontent.com/${RELEASES_REPO}/main/hola-update"
+        if curl -fsSL "$url" -o "${TMPDIR}/hola-update" 2>/dev/null; then
+            src="${TMPDIR}/hola-update"
+        fi
+    fi
+
+    if [ -z "$src" ] || [ ! -f "$src" ]; then
+        echo "Note: hola-update helper not installed (source not found)."
+        return 0
+    fi
+
+    $SUDO mkdir -p "${prefix}/bin" "$bin_dir"
+    $SUDO cp -f "$src" "$dest_prefix_bin"
+    $SUDO chmod 755 "$dest_prefix_bin"
+    $SUDO ln -sf "$dest_prefix_bin" "$dest_link" 2>/dev/null \
+        || $SUDO cp -f "$dest_prefix_bin" "$dest_link"
+    echo "Installed hola-update -> ${dest_link}"
+}
+
 _hola_enable_zsh() {
     local prefix="$1"
     local zshrc="${HOME}/.zshrc"
@@ -61,7 +204,7 @@ _hola_enable_zsh() {
             echo ""
             echo "Hola Zsh plugin is already enabled in ~/.zshrc."
         else
-            sed -i "s|source .*hola-zsh\.plugin\.zsh|source ${plugin_path}|" "$zshrc"
+            _hola_sed_inplace "s|source .*hola-zsh\.plugin\.zsh|source ${plugin_path}|" "$zshrc"
             echo ""
             echo "Updated Hola Zsh plugin path in ~/.zshrc to ${plugin_path}."
             echo "Run 'source ~/.zshrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
@@ -99,7 +242,7 @@ _hola_enable_bash() {
             echo ""
             echo "Hola Bash plugin is already enabled in ~/.bashrc."
         else
-            sed -i "s|source .*hola-bash\.sh|source ${plugin_path}|" "$bashrc"
+            _hola_sed_inplace "s|source .*hola-bash\.sh|source ${plugin_path}|" "$bashrc"
             echo ""
             echo "Updated Hola Bash plugin path in ~/.bashrc to ${plugin_path}."
             echo "Run 'source ~/.bashrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
@@ -114,6 +257,7 @@ _hola_enable_bash() {
     echo "Enabled Hola Bash plugin in ~/.bashrc."
     echo "Run 'source ~/.bashrc' or open a new terminal to use hola-suggest, hola-explain, and hola-chat."
 }
+
 
 _hola_print_next_steps() {
     local prefix="$1"
@@ -132,9 +276,10 @@ _hola_print_next_steps() {
     echo "  hola-explain  — explain the last command"
     echo "  hola-chat     — context-aware shell chat"
     echo ""
-    echo "To load C plugins (shared by hola-coder and hola-admin), set:"
+    echo "C plugins are auto-wired on install:"
     echo "  HOLA_PLUGIN_DIR=${prefix}/foundation_apps/hola-coder/plugins"
-    echo "hola-admin also auto-discovers that directory when installed side-by-side."
+    echo "  ~/.hola/plugins -> that directory (fallback when env is unset)"
+    echo "Upgrade later with:  hola-update"
     echo ""
     echo "To use the Neovim plugin, add to your init.vim/init.lua:"
     echo "  source ${prefix}/foundation_apps/hola-vim/plugin/hola.vim"
@@ -180,6 +325,9 @@ install_deb() {
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
     _hola_enable_bash "/opt/hola"
+    _hola_setup_plugins "/opt/hola"
+    _hola_fix_permissions "/opt/hola" "/usr/bin"
+    _hola_install_update_helper "/opt/hola" "/usr/bin"
 }
 
 install_rpm() {
@@ -206,6 +354,9 @@ install_rpm() {
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
     _hola_enable_bash "/opt/hola"
+    _hola_setup_plugins "/opt/hola"
+    _hola_fix_permissions "/opt/hola" "/usr/bin"
+    _hola_install_update_helper "/opt/hola" "/usr/bin"
 }
 
 install_arch_pkg() {
@@ -223,6 +374,9 @@ install_arch_pkg() {
     _hola_print_next_steps "/opt/hola" "/usr/bin"
     _hola_enable_zsh "/opt/hola"
     _hola_enable_bash "/opt/hola"
+    _hola_setup_plugins "/opt/hola"
+    _hola_fix_permissions "/opt/hola" "/usr/bin"
+    _hola_install_update_helper "/opt/hola" "/usr/bin"
 }
 
 install_tarball() {
@@ -296,6 +450,9 @@ install_tarball() {
     _hola_print_next_steps "$PREFIX" "$BIN_DIR"
     _hola_enable_zsh "$PREFIX"
     _hola_enable_bash "$PREFIX"
+    _hola_setup_plugins "$PREFIX"
+    _hola_fix_permissions "$PREFIX" "$BIN_DIR"
+    _hola_install_update_helper "$PREFIX" "$BIN_DIR"
 }
 
 if ! command -v curl >/dev/null 2>&1; then

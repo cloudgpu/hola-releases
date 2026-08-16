@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+# Update Hola (hola-coder / hola-admin / hola-prompt) without sudo.
+# Clears Gatekeeper quarantine and ad-hoc resigns binaries so they can run.
+#
+# Usage:
+#   hola-update              # install/update latest GitHub release
+#   hola-update 0.6.7        # install/update a specific version
+#   HOLA_VERSION=0.6.8 hola-update
+#
+# Env:
+#   HOLA_VERSION            pin version (overrides latest auto-detect)
+#   HOLA_RELEASES_REPO      GitHub repo (default: cloudgpu/hola-releases)
+#   HOLA_INSTALL_PREFIX     install root (default: ~/.local/hola)
+#   HOLA_BIN_DIR            symlink dir (default: ~/.local/bin)
+#   HOLA_ENABLE_ZSH         1 to ensure zsh plugin in ~/.zshrc (default: 1)
+#   HOLA_SKIP_CODESIGN      1 to skip ad-hoc codesign (default: 0)
+
+set -euo pipefail
+
+RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
+PREFIX="${HOLA_INSTALL_PREFIX:-$HOME/.local/hola}"
+BIN_DIR="${HOLA_BIN_DIR:-$HOME/.local/bin}"
+ENABLE_ZSH="${HOLA_ENABLE_ZSH:-1}"
+SKIP_CODESIGN="${HOLA_SKIP_CODESIGN:-0}"
+
+resolve_version() {
+  if [ -n "${1:-}" ]; then
+    echo "$1"
+    return
+  fi
+  if [ -n "${HOLA_VERSION:-}" ]; then
+    echo "$HOLA_VERSION"
+    return
+  fi
+  # Latest GitHub release tag (vX.Y.Z -> X.Y.Z)
+  local tag
+  tag=$(curl -fsSL "https://api.github.com/repos/${RELEASES_REPO}/releases/latest"     | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p'     | head -n1)
+  if [ -z "$tag" ]; then
+    echo "Could not resolve latest version from GitHub; pass a version explicitly." >&2
+    echo "  hola-update 0.6.7" >&2
+    exit 1
+  fi
+  echo "${tag#v}"
+}
+
+VERSION="$(resolve_version "${1:-}")"
+
+MACHINE=$(uname -m)
+case "$MACHINE" in
+  x86_64|amd64) TAR_ARCH=amd64 ;;
+  arm64|aarch64) TAR_ARCH=arm64 ;;
+  *) echo "Unsupported architecture: $MACHINE" >&2; exit 1 ;;
+esac
+
+OS=$(uname -s)
+case "$OS" in
+  Darwin) OS_TAG=darwin ;;
+  Linux)  OS_TAG=linux ;;
+  FreeBSD) OS_TAG=freebsd ;;
+  *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
+esac
+
+PKG="hola-${VERSION}-${OS_TAG}-${TAR_ARCH}.tar.gz"
+URL="https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}/${PKG}"
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required" >&2
+  exit 1
+fi
+
+TMPDIR=$(mktemp -d)
+cleanup() { rm -rf "$TMPDIR"; }
+trap cleanup EXIT
+
+echo "==> Hola update"
+echo "    version : ${VERSION}"
+echo "    package : ${PKG}"
+echo "    prefix  : ${PREFIX}"
+echo "    bin     : ${BIN_DIR}"
+echo "    url     : ${URL}"
+echo
+
+echo "==> Downloading..."
+if ! curl -fL --progress-bar -o "${TMPDIR}/${PKG}" "$URL"; then
+  echo "Download failed: $URL" >&2
+  echo "Check the version tag exists on https://github.com/${RELEASES_REPO}/releases" >&2
+  exit 1
+fi
+
+echo "==> Extracting..."
+tar -xzf "${TMPDIR}/${PKG}" -C "$TMPDIR"
+if [ ! -d "${TMPDIR}/opt/hola" ]; then
+  echo "Unexpected tarball layout: missing opt/hola" >&2
+  exit 1
+fi
+
+# Backup previous install (no sudo)
+if [ -d "$PREFIX" ] && [ -n "$(find "$PREFIX" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+  BAK="${PREFIX}.bak"
+  echo "==> Backing up existing install to ${BAK}"
+  rm -rf "$BAK"
+  # Prefer atomic rename when we own the tree
+  if [ -O "$PREFIX" ] && mv "$PREFIX" "$BAK" 2>/dev/null; then
+    :
+  else
+    mkdir -p "$BAK"
+    # Copy what we can; then wipe children we can delete
+    cp -R -p "$PREFIX/." "$BAK/" 2>/dev/null || true
+    find "$PREFIX" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+  fi
+fi
+
+echo "==> Installing to ${PREFIX}..."
+mkdir -p "$PREFIX" "$BIN_DIR"
+# Clear any leftover children
+find "$PREFIX" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+cp -R -p "${TMPDIR}/opt/hola/." "$PREFIX/"
+
+echo "==> Fixing execute permissions..."
+# Tarballs / Gatekeeper can drop +x; plugins must be loadable as shared objects.
+find "$PREFIX" -type f \( -name 'hola-*' -o -name '*.so' -o -name '*.dylib' \) -exec chmod a+x {} + 2>/dev/null || true
+find "$PREFIX/foundation_apps" -type f -path '*/bin/*' -exec chmod a+x {} + 2>/dev/null || true
+find "$PREFIX" -type f -name '*.so' -exec chmod a+rx {} + 2>/dev/null || true
+
+echo "==> Linking CLI tools into ${BIN_DIR}..."
+for name in hola-admin hola-coder hola-prompt; do
+  target="$PREFIX/foundation_apps/${name}/bin/${name}"
+  link="$BIN_DIR/${name}"
+  if [ ! -x "$target" ] && [ ! -f "$target" ]; then
+    echo "    warn: missing $target" >&2
+    continue
+  fi
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    if ! rm -f "$link" 2>/dev/null; then
+      echo "    error: cannot replace $link (root-owned?). Run:" >&2
+      echo "      sudo rm -f '$link' && ln -sf '$target' '$link'" >&2
+      continue
+    fi
+  fi
+  ln -sf "$target" "$link"
+  echo "    linked $name"
+done
+
+# Ship / refresh hola-update itself into BIN_DIR (and into the install prefix).
+UPDATE_SRC="${BASH_SOURCE[0]:-}"
+if [ -n "$UPDATE_SRC" ] && [ -f "$UPDATE_SRC" ]; then
+  mkdir -p "$PREFIX/bin"
+  cp -f "$UPDATE_SRC" "$PREFIX/bin/hola-update"
+  chmod 755 "$PREFIX/bin/hola-update"
+  if [ -e "$BIN_DIR/hola-update" ] || [ -L "$BIN_DIR/hola-update" ]; then
+    rm -f "$BIN_DIR/hola-update" 2>/dev/null || true
+  fi
+  ln -sf "$PREFIX/bin/hola-update" "$BIN_DIR/hola-update" 2>/dev/null     || cp -f "$PREFIX/bin/hola-update" "$BIN_DIR/hola-update"
+  echo "    linked hola-update"
+fi
+
+if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
+  echo
+  echo "Note: ${BIN_DIR} is not on PATH. Add:"
+  echo "  export PATH=\"${BIN_DIR}:\$PATH\""
+fi
+
+echo "==> Clearing Gatekeeper quarantine / xattrs..."
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "$PREFIX" 2>/dev/null || true
+  for name in hola-admin hola-coder hola-prompt hola-update; do
+    xattr -c "$BIN_DIR/$name" 2>/dev/null || true
+  done
+  echo "    cleared"
+else
+  echo "    xattr not found; skip"
+fi
+
+if [ "$SKIP_CODESIGN" != "1" ] && [ "$OS_TAG" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
+  echo "==> Ad-hoc codesigning Mach-O binaries (local trust)..."
+  # shellcheck disable=SC2038
+  find "$PREFIX" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0 \
+    | while IFS= read -r -d '' f; do
+        if file "$f" 2>/dev/null | grep -q 'Mach-O'; then
+          codesign --force --sign - "$f" 2>/dev/null || true
+        fi
+      done
+else
+  echo "==> Skipping codesign"
+fi
+
+ensure_line() {
+  # ensure_line <file> <marker_grep> <lines_to_append>
+  local file="$1"
+  local marker="$2"
+  shift 2
+  mkdir -p "$(dirname "$file")"
+  touch "$file"
+  if grep -qF "$marker" "$file" 2>/dev/null; then
+    return 0
+  fi
+  printf '\n' >> "$file"
+  for line in "$@"; do
+    printf '%s\n' "$line" >> "$file"
+  done
+}
+
+if [ "$ENABLE_ZSH" = "1" ] && [ -n "${ZDOTDIR:-$HOME}" ]; then
+  ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
+  PLUGIN_PATH="$PREFIX/foundation_apps/hola-zsh/plugin/hola-zsh.plugin.zsh"
+  if [ -f "$PLUGIN_PATH" ]; then
+    echo "==> Ensuring zsh plugin in ${ZSHRC}..."
+    if [ -f "$ZSHRC" ] && grep -q 'hola-zsh.plugin.zsh' "$ZSHRC" 2>/dev/null; then
+      # Refresh path if it points elsewhere
+      if ! grep -qF "source ${PLUGIN_PATH}" "$ZSHRC" 2>/dev/null; then
+        # portable-ish: rewrite any source ...hola-zsh.plugin.zsh line
+        if command -v sed >/dev/null 2>&1; then
+          # macOS/BSD sed needs -i ''
+          if sed --version >/dev/null 2>&1; then
+            sed -i "s|source .*hola-zsh\\.plugin\\.zsh|source ${PLUGIN_PATH}|" "$ZSHRC"
+          else
+            sed -i '' "s|source .*hola-zsh\\.plugin\\.zsh|source ${PLUGIN_PATH}|" "$ZSHRC"
+          fi
+          echo "    updated plugin path"
+        fi
+      else
+        echo "    already enabled"
+      fi
+    else
+      ensure_line "$ZSHRC" "hola-zsh.plugin.zsh" \
+        "# Hola Zsh plugin (hola-suggest, hola-explain, hola-chat)" \
+        "source ${PLUGIN_PATH}"
+      echo "    enabled"
+    fi
+  fi
+fi
+
+PLUGIN_DIR="$PREFIX/foundation_apps/hola-coder/plugins"
+if [ -d "$PLUGIN_DIR" ]; then
+  echo "==> Ensuring HOLA_PLUGIN_DIR in shell rc..."
+  # Always write the actual PREFIX path so custom installs work.
+  plugin_export_line="export HOLA_PLUGIN_DIR=\"${PLUGIN_DIR}\""
+  for rc in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc"; do
+    ensure_line "$rc" "HOLA_PLUGIN_DIR" \
+      "# Hola coder C plugins (tools)" \
+      "$plugin_export_line"
+    # If marker exists but path is stale, rewrite the export line.
+    if grep -q 'HOLA_PLUGIN_DIR' "$rc" 2>/dev/null \
+       && ! grep -qF "HOLA_PLUGIN_DIR=\"${PLUGIN_DIR}\"" "$rc" 2>/dev/null; then
+      if sed --version >/dev/null 2>&1; then
+        sed -i "s|export HOLA_PLUGIN_DIR=.*|export HOLA_PLUGIN_DIR=\"${PLUGIN_DIR}\"|" "$rc"
+      else
+        sed -i '' "s|export HOLA_PLUGIN_DIR=.*|export HOLA_PLUGIN_DIR=\"${PLUGIN_DIR}\"|" "$rc"
+      fi
+      echo "    updated path in $rc"
+    fi
+  done
+  export HOLA_PLUGIN_DIR="$PLUGIN_DIR"
+
+  # Fallback path: hola-coder also loads ~/.hola/plugins when ./plugins is empty
+  # and HOLA_PLUGIN_DIR is unset (IDE / non-interactive shells that skip .zshrc).
+  HOLA_HOME_DIR="${HOLA_HOME:-$HOME/.hola}"
+  USER_PLUGIN_LINK="${HOLA_HOME_DIR}/plugins"
+  echo "==> Ensuring ${USER_PLUGIN_LINK} -> ${PLUGIN_DIR}..."
+  mkdir -p "$HOLA_HOME_DIR"
+  if [ -L "$USER_PLUGIN_LINK" ] || [ ! -e "$USER_PLUGIN_LINK" ]; then
+    ln -sfn "$PLUGIN_DIR" "$USER_PLUGIN_LINK"
+    echo "    linked $(readlink "$USER_PLUGIN_LINK" 2>/dev/null || echo "$PLUGIN_DIR")"
+  elif [ -d "$USER_PLUGIN_LINK" ]; then
+    echo "    warn: ${USER_PLUGIN_LINK} exists as a real directory (not replaced)" >&2
+  else
+    echo "    warn: cannot create ${USER_PLUGIN_LINK} (path exists and is not a dir/symlink)" >&2
+  fi
+fi
+
+echo "==> Verifying..."
+export PATH="${BIN_DIR}:$PATH"
+ok=1
+for name in hola-coder hola-admin hola-prompt; do
+  if command -v "$name" >/dev/null 2>&1; then
+    ver=$("$name" -v 2>/dev/null || "$name" --version 2>/dev/null || echo "?")
+    echo "    $name: $ver"
+  else
+    echo "    $name: NOT FOUND on PATH" >&2
+    ok=0
+  fi
+done
+
+if command -v hola-coder >/dev/null 2>&1; then
+  # Unset HOLA_PLUGIN_DIR to verify ~/.hola/plugins fallback works too.
+  tools_out=$(
+    env -u HOLA_PLUGIN_DIR hola-coder -l 2>&1 || true
+  )
+  if printf '%s\n' "$tools_out" | grep -qE 'loaded [1-9][0-9]* (additional )?plugin'; then
+    plugin_msg=$(printf '%s\n' "$tools_out" | grep -E 'loaded [0-9]+ (additional )?plugin' | head -n2 | tr '\n' '; ')
+    echo "    hola-coder plugins: ${plugin_msg%; }"
+    echo "    hola-coder tools: ok"
+  elif HOLA_PLUGIN_DIR="${HOLA_PLUGIN_DIR:-$PLUGIN_DIR}" hola-coder -l >/dev/null 2>&1; then
+    echo "    hola-coder tools: ok (via HOLA_PLUGIN_DIR only; check ~/.hola/plugins)"
+  else
+    echo "    hola-coder tools: list failed (binary still runs?)" >&2
+  fi
+fi
+
+echo
+if [ "$ok" -eq 1 ]; then
+  echo "Done. Hola ${VERSION} is ready."
+  echo "Open a new terminal or run:  source ~/.zshrc"
+  echo "Commands: hola-coder, hola-admin, hola-prompt, hola-chat (zsh function)"
+else
+  echo "Finished with warnings — check messages above." >&2
+  exit 1
+fi
