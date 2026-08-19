@@ -145,7 +145,10 @@ done
 UPDATE_SRC="${BASH_SOURCE[0]:-}"
 if [ -n "$UPDATE_SRC" ] && [ -f "$UPDATE_SRC" ]; then
   mkdir -p "$PREFIX/bin"
-  cp -f "$UPDATE_SRC" "$PREFIX/bin/hola-update"
+  # Skip the copy if source and destination are the same file.
+  if [ "$(readlink -f "$UPDATE_SRC" 2>/dev/null)" != "$(readlink -f "$PREFIX/bin/hola-update" 2>/dev/null)" ]; then
+    cp -f "$UPDATE_SRC" "$PREFIX/bin/hola-update"
+  fi
   chmod 755 "$PREFIX/bin/hola-update"
   if [ -e "$BIN_DIR/hola-update" ] || [ -L "$BIN_DIR/hola-update" ]; then
     rm -f "$BIN_DIR/hola-update" 2>/dev/null || true

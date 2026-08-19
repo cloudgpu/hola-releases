@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 0.6.9)
+#   HOLA_VERSION            release version to install (default: 0.7.1)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -14,7 +14,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-0.6.9}"
+VERSION="${HOLA_VERSION:-0.7.1}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -174,8 +174,15 @@ _hola_install_update_helper() {
     fi
 
     $SUDO mkdir -p "${prefix}/bin" "$bin_dir"
-    $SUDO cp -f "$src" "$dest_prefix_bin"
+
+    # Skip the copy if source and destination are the same file (happens when
+    # the deb/rpm package already installed hola-update into prefix/bin).
+    if [ "$(readlink -f "$src" 2>/dev/null)" != "$(readlink -f "$dest_prefix_bin" 2>/dev/null)" ]; then
+        $SUDO cp -f "$src" "$dest_prefix_bin"
+    fi
     $SUDO chmod 755 "$dest_prefix_bin"
+
+    # Refresh the symlink even if the binary was already in place.
     $SUDO ln -sf "$dest_prefix_bin" "$dest_link" 2>/dev/null \
         || $SUDO cp -f "$dest_prefix_bin" "$dest_link"
     echo "Installed hola-update -> ${dest_link}"
