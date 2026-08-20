@@ -1,11 +1,11 @@
-# Hola 0.7.4 Release Notes
+# Hola 0.7.5 Release Notes
 
 * Installer now wires `HOLA_PLUGIN_DIR`, links `~/.hola/plugins`, fixes execute bits,
   and on macOS clears Gatekeeper quarantine + ad-hoc codesigns binaries.
 * New `hola-update` helper for user-space upgrades (`~/.local/hola`).
 * `hola-coder`/`hola-admin` resolve the real executable path so plugins load via symlinks.
 
-Released 2026-08-19.
+Released 2026-08-20.
 
 ## Bug fixes
 
