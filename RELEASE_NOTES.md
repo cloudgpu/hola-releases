@@ -1,4 +1,4 @@
-# Hola 0.8.1 Release Notes
+# Hola 0.8.2 Release Notes
 
 * Installer now wires `HOLA_PLUGIN_DIR`, links `~/.hola/plugins`, fixes execute bits,
   and on macOS clears Gatekeeper quarantine + ad-hoc codesigns binaries.
