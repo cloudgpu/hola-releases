@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 1.0.0)
+#   HOLA_VERSION            release version to install (default: 1.0.1)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -14,7 +14,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-1.0.0}"
+VERSION="${HOLA_VERSION:-1.0.1}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -342,9 +342,31 @@ install_rpm() {
     local rpm_arch
     rpm_arch=$(uname -m)
     local pkg="hola-${VERSION}-1.${rpm_arch}.rpm"
+
+    # The default RPM is built against Fedora's rolling-release glibc, which
+    # is newer than what RHEL 9 and its rebuilds (CentOS Stream 9, Rocky
+    # Linux 9, AlmaLinux 9 - all glibc 2.34) ship, and fails at runtime with
+    # "GLIBC_2.3x not found". Fedora itself tracks that newer glibc, so only
+    # redirect the el9 family; actual Fedora keeps the default package.
+    local distro="$1"
+    case "$distro" in
+        *rhel*|*centos*|*rocky*|*alma*)
+            local el9_pkg="hola-${VERSION}-1.${rpm_arch}.el9.rpm"
+            local el9_url="${BASE_URL}/${el9_pkg}"
+            echo "RHEL-family distro detected; trying el9 package ${el9_pkg}..."
+            if curl -fsSL "$el9_url" -o "${TMPDIR}/${el9_pkg}"; then
+                pkg="$el9_pkg"
+            else
+                echo "el9 package not available, falling back to standard package."
+            fi
+            ;;
+    esac
+
     local url="${BASE_URL}/${pkg}"
-    echo "Downloading RPM package ${pkg}..."
-    curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
+    if [ ! -f "${TMPDIR}/${pkg}" ]; then
+        echo "Downloading RPM package ${pkg}..."
+        curl -fsSL "$url" -o "${TMPDIR}/${pkg}"
+    fi
     if command -v dnf >/dev/null 2>&1; then
         echo "Installing with dnf..."
         $SUDO dnf install -y "${TMPDIR}/${pkg}"
@@ -479,7 +501,7 @@ case "$OS" in
                 install_deb
                 ;;
             *fedora*|*rhel*|*centos*|*rocky*|*alma*|*opensuse*|*suse*)
-                install_rpm
+                install_rpm "$DISTRO"
                 ;;
             *arch*|*manjaro*)
                 install_arch_pkg
