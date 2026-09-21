@@ -14,7 +14,7 @@
   and `/agent/hola-ai-agent/tutorials/master-worker`. Content must be added
   to `website/src/content/...` (not `hola/docs/`) to reach the site.
 
-# Hola 1.0.7 Release Notes
+# Hola 1.0.9 Release Notes
 
 ## Master / worker delegation
 
