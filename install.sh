@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 1.0.5)
+#   HOLA_VERSION            release version to install (default: 1.0.6)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -14,7 +14,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-1.0.5}"
+VERSION="${HOLA_VERSION:-1.0.6}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -22,12 +22,23 @@ MACHINE=$(uname -m)
 case "$MACHINE" in
     x86_64|amd64) ARCH=x86_64; DEB_ARCH=amd64; TAR_ARCH=amd64 ;;
     arm64|aarch64) ARCH=arm64; DEB_ARCH=arm64; TAR_ARCH=arm64 ;;
+    armv7l|armv8l|armv6l|armhf) ARCH=arm; DEB_ARCH=armhf; TAR_ARCH=arm ;;
     *) echo "Unsupported architecture: $MACHINE" >&2; exit 1 ;;
 esac
 
 SUDO=""
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
     SUDO="sudo"
+fi
+
+# Capture Termux's own $PREFIX (e.g. /data/data/com.termux/files/usr) before
+# install_tarball() below reassigns the (unrelated) global var of the same
+# name to our own install prefix.
+TERMUX_APP_PREFIX="${PREFIX:-}"
+IS_TERMUX=0
+if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux/files/usr" ]; then
+    IS_TERMUX=1
+    [ -n "$TERMUX_APP_PREFIX" ] || TERMUX_APP_PREFIX="/data/data/com.termux/files/usr"
 fi
 
 detect_linux_distro() {
@@ -415,6 +426,11 @@ install_tarball() {
 
     if [ -n "${HOLA_INSTALL_PREFIX:-}" ]; then
         PREFIX="$HOLA_INSTALL_PREFIX"
+    elif [ "$os" = "android" ]; then
+        # Termux apps can only write under their own app-private prefix;
+        # /opt and $HOME/.local/bin (not on Termux's default PATH) don't
+        # apply here. $TERMUX_APP_PREFIX/bin is already on PATH.
+        PREFIX="${TERMUX_APP_PREFIX}/opt/hola"
     elif [ "$(id -u)" -eq 0 ] || [ -w /opt ]; then
         PREFIX="/opt/hola"
     else
@@ -423,6 +439,8 @@ install_tarball() {
 
     if [ -n "${HOLA_BIN_DIR:-}" ]; then
         BIN_DIR="$HOLA_BIN_DIR"
+    elif [ "$os" = "android" ]; then
+        BIN_DIR="${TERMUX_APP_PREFIX}/bin"
     elif [ "$PREFIX" = "/opt/hola" ]; then
         BIN_DIR="/usr/local/bin"
     else
@@ -495,22 +513,28 @@ trap 'rm -rf "$TMPDIR"' EXIT
 OS=$(uname -s)
 case "$OS" in
     Linux)
-        DISTRO=$(detect_linux_distro)
-        case "$DISTRO" in
-            *debian*|*ubuntu*|*mint*|*pop*)
-                install_deb
-                ;;
-            *fedora*|*rhel*|*centos*|*rocky*|*alma*|*opensuse*|*suse*)
-                install_rpm "$DISTRO"
-                ;;
-            *arch*|*manjaro*)
-                install_arch_pkg
-                ;;
-            *)
-                echo "No native package for this distro. Falling back to tarball."
-                install_tarball linux
-                ;;
-        esac
+        if [ "$IS_TERMUX" = "1" ]; then
+            # Termux reports Linux/aarch64 via uname but runs on Android's
+            # Bionic libc — the glibc linux-arm64 build won't execute there.
+            install_tarball android
+        else
+            DISTRO=$(detect_linux_distro)
+            case "$DISTRO" in
+                *debian*|*ubuntu*|*mint*|*pop*)
+                    install_deb
+                    ;;
+                *fedora*|*rhel*|*centos*|*rocky*|*alma*|*opensuse*|*suse*)
+                    install_rpm "$DISTRO"
+                    ;;
+                *arch*|*manjaro*)
+                    install_arch_pkg
+                    ;;
+                *)
+                    echo "No native package for this distro. Falling back to tarball."
+                    install_tarball linux
+                    ;;
+            esac
+        fi
         ;;
     Darwin)
         install_tarball darwin

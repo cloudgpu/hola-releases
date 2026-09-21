@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# Update Hola (hola-coder / hola-admin / hola-prompt) without sudo.
-# Clears Gatekeeper quarantine and ad-hoc resigns binaries so they can run.
+# Update Hola (hola-coder / hola-admin / hola-prompt) to the latest release
+# and make sure it's the one on PATH. Zero user config required.
+#
+# If the original install came from a system package manager (apt/dpkg,
+# dnf/yum/zypper/rpm, or pacman — what install.sh uses on Debian/Fedora/RHEL/
+# Arch families), this updates that package in place (sudo only if needed).
+# Otherwise it falls back to the no-sudo tarball flow: installs under
+# ~/.local/hola, symlinks into ~/.local/bin, and puts ~/.local/bin first on
+# PATH in ~/.zshrc and ~/.bashrc. Covers macOS, Linux (any distro), and
+# FreeBSD. Clears Gatekeeper quarantine and ad-hoc resigns binaries on macOS.
 #
 # Usage:
 #   hola-update              # install/update latest GitHub release
@@ -17,9 +25,25 @@
 
 set -euo pipefail
 
+# Capture Termux's own $PREFIX (e.g. /data/data/com.termux/files/usr) before
+# we overwrite it below with our own (unrelated) install-prefix variable of
+# the same name.
+IS_TERMUX=0
+TERMUX_APP_PREFIX="${PREFIX:-}"
+if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux/files/usr" ]; then
+  IS_TERMUX=1
+  [ -n "$TERMUX_APP_PREFIX" ] || TERMUX_APP_PREFIX="/data/data/com.termux/files/usr"
+fi
+
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 PREFIX="${HOLA_INSTALL_PREFIX:-$HOME/.local/hola}"
-BIN_DIR="${HOLA_BIN_DIR:-$HOME/.local/bin}"
+if [ "$IS_TERMUX" = "1" ]; then
+  # Termux's $PREFIX/bin is already on PATH by default; no PATH surgery,
+  # no HOME-relative dir the app can't see from a fresh session.
+  BIN_DIR="${HOLA_BIN_DIR:-$TERMUX_APP_PREFIX/bin}"
+else
+  BIN_DIR="${HOLA_BIN_DIR:-$HOME/.local/bin}"
+fi
 ENABLE_ZSH="${HOLA_ENABLE_ZSH:-1}"
 SKIP_CODESIGN="${HOLA_SKIP_CODESIGN:-0}"
 
@@ -49,6 +73,7 @@ MACHINE=$(uname -m)
 case "$MACHINE" in
   x86_64|amd64) TAR_ARCH=amd64 ;;
   arm64|aarch64) TAR_ARCH=arm64 ;;
+  armv7l|armv8l|armv6l|armhf) TAR_ARCH=arm ;;
   *) echo "Unsupported architecture: $MACHINE" >&2; exit 1 ;;
 esac
 
@@ -60,8 +85,12 @@ case "$OS" in
   *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
 esac
 
-PKG="hola-${VERSION}-${OS_TAG}-${TAR_ARCH}.tar.gz"
-URL="https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}/${PKG}"
+# Termux reports Linux/aarch64 via uname, but runs on Android's Bionic libc
+# with a different filesystem layout — the glibc linux-arm64 build won't
+# execute there. Route to the dedicated Termux asset instead.
+if [ "$IS_TERMUX" = "1" ]; then
+  OS_TAG=android
+fi
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required" >&2
@@ -71,6 +100,109 @@ fi
 TMPDIR=$(mktemp -d)
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
+
+BASE_URL="https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}"
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+  SUDO="sudo"
+fi
+
+glibc_version() {
+  ldd --version 2>/dev/null | head -n1 | sed -n 's/.*[^0-9.]\([0-9]\+\.[0-9]\+\).*/\1/p'
+}
+
+detect_linux_distro() {
+  if [ -r /etc/os-release ]; then
+    # shellcheck source=/dev/null
+    . /etc/os-release
+    echo "$ID ${ID_LIKE:-}"
+  else
+    echo "unknown"
+  fi
+}
+
+# If the original install came from a system package manager (the case for
+# install.sh on Debian/Ubuntu, Fedora/RHEL-family, and Arch — which put the
+# real binaries in /opt/hola with a root-owned symlink in /usr/bin), update
+# THAT install in place. Otherwise a tarball install here just leaves the
+# package-managed copy in place, ~/.local/bin is shadowed on the default
+# PATH, and the user is stuck on whatever version the package manager last
+# saw (this is what happened: apt install hola 1.0.1, then hola-update kept
+# dropping fresh copies in ~/.local that nothing on PATH ever reached).
+update_via_pkg_manager() {
+  if [ "$OS_TAG" != "linux" ] || [ "$IS_TERMUX" = "1" ]; then
+    return 1
+  fi
+
+  if command -v dpkg >/dev/null 2>&1 && dpkg -s hola >/dev/null 2>&1; then
+    local pkg="hola_${VERSION}_${TAR_ARCH}.deb"
+    local glibc
+    glibc=$(glibc_version)
+    if [ -n "$glibc" ] && [ "$(printf '%s\n2.38\n' "$glibc" | sort -V | head -n1)" = "$glibc" ] && [ "$glibc" != "2.38" ]; then
+      local legacy="hola_${VERSION}_${TAR_ARCH}-ubuntu20.04.deb"
+      if curl -fsSL "${BASE_URL}/${legacy}" -o "${TMPDIR}/${legacy}" 2>/dev/null; then
+        pkg="$legacy"
+      fi
+    fi
+    echo "==> Hola update (apt/dpkg package: hola)"
+    echo "    version : ${VERSION}"
+    [ -f "${TMPDIR}/${pkg}" ] || curl -fsSL "${BASE_URL}/${pkg}" -o "${TMPDIR}/${pkg}"
+    $SUDO dpkg -i --force-overwrite "${TMPDIR}/${pkg}"
+    command -v apt-get >/dev/null 2>&1 && $SUDO apt-get install -f -y || true
+    PREFIX="/opt/hola"; BIN_DIR="/usr/bin"
+    return 0
+  fi
+
+  if command -v rpm >/dev/null 2>&1 && rpm -q hola >/dev/null 2>&1; then
+    local rpm_arch pkg
+    rpm_arch=$(uname -m)
+    pkg="hola-${VERSION}-1.${rpm_arch}.rpm"
+    case "$(detect_linux_distro)" in
+      *rhel*|*centos*|*rocky*|*alma*)
+        local el9="hola-${VERSION}-1.${rpm_arch}.el9.rpm"
+        if curl -fsSL "${BASE_URL}/${el9}" -o "${TMPDIR}/${el9}" 2>/dev/null; then
+          pkg="$el9"
+        fi
+        ;;
+    esac
+    echo "==> Hola update (rpm package: hola)"
+    echo "    version : ${VERSION}"
+    [ -f "${TMPDIR}/${pkg}" ] || curl -fsSL "${BASE_URL}/${pkg}" -o "${TMPDIR}/${pkg}"
+    if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y "${TMPDIR}/${pkg}"
+    elif command -v yum >/dev/null 2>&1; then $SUDO yum install -y "${TMPDIR}/${pkg}"
+    elif command -v zypper >/dev/null 2>&1; then $SUDO zypper install -y "${TMPDIR}/${pkg}"
+    else $SUDO rpm -Uvh "${TMPDIR}/${pkg}"
+    fi
+    PREFIX="/opt/hola"; BIN_DIR="/usr/bin"
+    return 0
+  fi
+
+  if command -v pacman >/dev/null 2>&1 && pacman -Qi hola >/dev/null 2>&1; then
+    local pacman_arch pkg
+    pacman_arch=$(uname -m)
+    pkg="hola-${VERSION}-1-${pacman_arch}.pkg.tar.zst"
+    echo "==> Hola update (pacman package: hola)"
+    echo "    version : ${VERSION}"
+    curl -fsSL "${BASE_URL}/${pkg}" -o "${TMPDIR}/${pkg}"
+    $SUDO pacman -U --noconfirm --overwrite '*' "${TMPDIR}/${pkg}"
+    PREFIX="/opt/hola"; BIN_DIR="/usr/bin"
+    return 0
+  fi
+
+  return 1
+}
+
+if update_via_pkg_manager; then
+  PKG_MANAGED=1
+else
+  PKG_MANAGED=0
+fi
+
+if [ "$PKG_MANAGED" = "0" ]; then
+
+PKG="hola-${VERSION}-${OS_TAG}-${TAR_ARCH}.tar.gz"
+URL="https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}/${PKG}"
 
 echo "==> Hola update"
 echo "    version : ${VERSION}"
@@ -157,10 +289,53 @@ if [ -n "$UPDATE_SRC" ] && [ -f "$UPDATE_SRC" ]; then
   echo "    linked hola-update"
 fi
 
-if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
-  echo
-  echo "Note: ${BIN_DIR} is not on PATH. Add:"
-  echo "  export PATH=\"${BIN_DIR}:\$PATH\""
+fi # PKG_MANAGED == 0 (tarball install/update)
+
+ensure_line() {
+  # ensure_line <file> <marker_grep> <lines_to_append>
+  local file="$1"
+  local marker="$2"
+  shift 2
+  mkdir -p "$(dirname "$file")"
+  touch "$file"
+  if grep -qF "$marker" "$file" 2>/dev/null; then
+    return 0
+  fi
+  printf '\n' >> "$file"
+  for line in "$@"; do
+    printf '%s\n' "$line" >> "$file"
+  done
+}
+
+# Make sure BIN_DIR wins over any older system-wide install (apt/rpm/pkg
+# putting hola-* in /usr/local/bin, /usr/bin, etc). Appending to PATH is not
+# enough since those dirs are usually already ahead of ~/.local/bin — we must
+# prepend, and prepend it as the LAST PATH mutation the rc file performs so it
+# stays first for every future shell. Zero user action required. Not needed
+# when PKG_MANAGED=1 (BIN_DIR is /usr/bin there) or on Termux (BIN_DIR is
+# $PREFIX/bin, Termux's own default PATH entry) — both already on PATH.
+if [ "$PKG_MANAGED" = "0" ] && [ "$IS_TERMUX" != "1" ]; then
+  PATH_MARKER="# Hola: put ${BIN_DIR} first on PATH"
+  PATH_LINE="export PATH=\"${BIN_DIR}:\$PATH\""
+  for rc in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc"; do
+    if [ -f "$rc" ] && grep -qF "$PATH_MARKER" "$rc" 2>/dev/null; then
+      :
+    else
+      ensure_line "$rc" "$PATH_MARKER" "$PATH_MARKER" "$PATH_LINE"
+    fi
+  done
+
+  # Diagnostic: warn (don't fail) if another hola-coder is reachable ahead of
+  # BIN_DIR in the CURRENT shell's PATH. The rc change above fixes this for
+  # new shells; flag it so the user isn't confused checking in this session.
+  for name in hola-coder hola-admin hola-prompt; do
+    other="$(command -v "$name" 2>/dev/null || true)"
+    mine="$(readlink -f "$BIN_DIR/$name" 2>/dev/null || true)"
+    if [ -n "$other" ] && [ -n "$mine" ] && [ "$(readlink -f "$other" 2>/dev/null)" != "$mine" ]; then
+      echo "    warn: another '$name' shadows the update at: $other" >&2
+      echo "          (fixed for new shells; run 'exec \$SHELL -l' or open a new terminal now)" >&2
+    fi
+  done
 fi
 
 echo "==> Clearing Gatekeeper quarantine / xattrs..."
@@ -186,22 +361,6 @@ if [ "$SKIP_CODESIGN" != "1" ] && [ "$OS_TAG" = "darwin" ] && command -v codesig
 else
   echo "==> Skipping codesign"
 fi
-
-ensure_line() {
-  # ensure_line <file> <marker_grep> <lines_to_append>
-  local file="$1"
-  local marker="$2"
-  shift 2
-  mkdir -p "$(dirname "$file")"
-  touch "$file"
-  if grep -qF "$marker" "$file" 2>/dev/null; then
-    return 0
-  fi
-  printf '\n' >> "$file"
-  for line in "$@"; do
-    printf '%s\n' "$line" >> "$file"
-  done
-}
 
 if [ "$ENABLE_ZSH" = "1" ] && [ -n "${ZDOTDIR:-$HOME}" ]; then
   ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
