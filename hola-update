@@ -273,20 +273,22 @@ for name in hola-admin hola-coder hola-prompt; do
   echo "    linked $name"
 done
 
-# Ship / refresh hola-update itself into BIN_DIR (and into the install prefix).
-UPDATE_SRC="${BASH_SOURCE[0]:-}"
-if [ -n "$UPDATE_SRC" ] && [ -f "$UPDATE_SRC" ]; then
-  mkdir -p "$PREFIX/bin"
-  # Skip the copy if source and destination are the same file.
-  if [ "$(readlink -f "$UPDATE_SRC" 2>/dev/null)" != "$(readlink -f "$PREFIX/bin/hola-update" 2>/dev/null)" ]; then
-    cp -f "$UPDATE_SRC" "$PREFIX/bin/hola-update"
-  fi
+# Link hola-update into BIN_DIR. The freshly-downloaded tarball's own
+# hola-update was already installed to $PREFIX/bin/hola-update by the
+# "Installing to $PREFIX" cp above (opt/hola/bin/hola-update in the
+# tarball) — use THAT, not the currently-running script. Copying from
+# $BASH_SOURCE here would silently overwrite the new version with
+# whatever (possibly old, pre-fix) hola-update the user happened to
+# invoke, making hola-update permanently unable to upgrade itself.
+if [ -f "$PREFIX/bin/hola-update" ]; then
   chmod 755 "$PREFIX/bin/hola-update"
   if [ -e "$BIN_DIR/hola-update" ] || [ -L "$BIN_DIR/hola-update" ]; then
     rm -f "$BIN_DIR/hola-update" 2>/dev/null || true
   fi
   ln -sf "$PREFIX/bin/hola-update" "$BIN_DIR/hola-update" 2>/dev/null     || cp -f "$PREFIX/bin/hola-update" "$BIN_DIR/hola-update"
   echo "    linked hola-update"
+else
+  echo "    warn: no hola-update found in downloaded package at $PREFIX/bin/hola-update" >&2
 fi
 
 fi # PKG_MANAGED == 0 (tarball install/update)
