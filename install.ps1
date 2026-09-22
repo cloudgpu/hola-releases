@@ -19,8 +19,10 @@ if (-not $InstallDir)   { $InstallDir   = if ($env:HOLA_INSTALL_DIR)  { $env:HOL
 $Version = $Version.TrimStart('v')
 
 function Show-Fallback {
+    param([string]$Url)
     Write-Host ""
     Write-Host "A native Windows build is not available for this release yet." -ForegroundColor Yellow
+    if ($Url) { Write-Host "  (no asset at $Url)" -ForegroundColor DarkGray }
     Write-Host "You can run Hola on Windows Subsystem for Linux (WSL) using the Linux installer:"
     Write-Host ""
     Write-Host "    wsl --install -d Ubuntu"
@@ -36,13 +38,24 @@ $zip = "hola-${Version}-windows-${arch}.zip"
 $url = "https://github.com/${ReleasesRepo}/releases/download/v${Version}/${zip}"
 
 Write-Host "Downloading hola $Version for windows/$arch from ${ReleasesRepo}..."
+Write-Host "  $url" -ForegroundColor DarkGray
 $tmp = New-TemporaryFile
 $tmpZip = "$tmp.zip"
 
 try {
     Invoke-WebRequest -Uri $url -OutFile $tmpZip -UseBasicParsing
 } catch {
-    Show-Fallback
+    # Only a 404 means "this release has no Windows zip". Every other
+    # failure (TLS, proxy, DNS, rate limit) used to print the same WSL
+    # message, which made real errors look like a missing build.
+    $status = $null
+    try { $status = [int]$_.Exception.Response.StatusCode } catch { }
+    if ($status -eq 404) { Show-Fallback -Url $url }
+    Write-Host ""
+    Write-Host "Download failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  URL: $url"
+    if ($status) { Write-Host "  HTTP status: $status" }
+    exit 1
 }
 
 Write-Host "Extracting to $InstallDir..."
