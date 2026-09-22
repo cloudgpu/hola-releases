@@ -1,18 +1,39 @@
-# Hola 1.0.6 Release Notes (unreleased)
+# Hola 1.1.0 Release Notes
 
-## Delegation fixes
+## Windows builds are published again
 
-* The built-in `codex` and `claude` profiles now read `workers` / `delegate`
-  from a `profiles.json` entry of the same name, so Codex can be a master
-  without redefining the profile.
-* `delegate` tool argument `max_tokens` renamed to `token_budget` with a
-  description that says it is a total budget, not an output length (models
-  were passing 6000 and starving the worker).
-* A worker stopped by its token budget now returns a clean
-  `budget_exhausted` report instead of a libcurl abort error.
-* Website: blog post and tutorial live at `/blog/master-worker-delegation`
-  and `/agent/hola-ai-agent/tutorials/master-worker`. Content must be added
-  to `website/src/content/...` (not `hola/docs/`) to reach the site.
+Every tagged release since v1.0.4 built a working Windows zip and then threw
+it away. The job uploaded a CI artifact before publishing to the releases
+repo; once the Actions artifact storage quota was hit that upload failed and
+the publish step was skipped, so the run went red with a good build inside
+it. The release upload now runs first and the artifact copy is last,
+non-blocking, and expires after 7 days.
+
+* `scripts/install.ps1` used `($env:HOLA_VERSION -or '<version>')` for its
+  parameter defaults. `-or` is a logical operator in PowerShell: it returns
+  a boolean, so `$Version` was the string "True" and every download 404'd
+  into the WSL fallback. Defaults now use `if`/`else`, and a leading `v` in
+  `HOLA_VERSION` is accepted.
+* A new CI step parses `install.ps1` on a Windows runner and asserts the
+  defaults resolve, so this cannot ship again.
+* `scripts/full-release.sh` bumps the new default form and refuses to run if
+  it cannot find exactly one match, instead of silently leaving a stale
+  version behind.
+* `gateway-ci` artifacts now expire (7 days for the 33 MB image tarball, 14
+  for the small ones). That artifact, kept 90 days by default, is what
+  filled the quota.
+
+Install on Windows, in PowerShell:
+
+    irm https://cloudgpu.io/install.ps1 | iex
+
+## Website
+
+* The install command on cloudgpu.io detects Windows visitors and shows the
+  PowerShell line instead of the `curl | sh` one, with a link to switch
+  platforms by hand.
+
+Released 2026-09-22.
 
 # Hola 1.0.9 Release Notes
 

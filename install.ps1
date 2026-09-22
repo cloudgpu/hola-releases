@@ -4,10 +4,19 @@
 # Usage:
 #   Invoke-Expression (Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.ps1' -UseBasicParsing).Content
 param(
-    [string]$Version = ($env:HOLA_VERSION -or '1.0.9'),
-    [string]$ReleasesRepo = ($env:HOLA_RELEASES_REPO -or 'cloudgpu/hola-releases'),
-    [string]$InstallDir = ($env:HOLA_INSTALL_DIR -or "$env:LOCALAPPDATA\hola")
+    # NOTE: do not use `-or` for defaults here. It is a logical operator in
+    # PowerShell: it coerces both sides to [bool] and returns True/False, so
+    # $Version became the string "True" and every download 404'd into the
+    # WSL fallback.
+    [string]$Version,
+    [string]$ReleasesRepo,
+    [string]$InstallDir
 )
+
+if (-not $Version)      { $Version      = if ($env:HOLA_VERSION)      { $env:HOLA_VERSION }      else { '1.1.0' } }
+if (-not $ReleasesRepo) { $ReleasesRepo = if ($env:HOLA_RELEASES_REPO) { $env:HOLA_RELEASES_REPO } else { 'cloudgpu/hola-releases' } }
+if (-not $InstallDir)   { $InstallDir   = if ($env:HOLA_INSTALL_DIR)  { $env:HOLA_INSTALL_DIR }  else { "$env:LOCALAPPDATA\hola" } }
+$Version = $Version.TrimStart('v')
 
 function Show-Fallback {
     Write-Host ""
