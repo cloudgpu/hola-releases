@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 1.1.2)
+#   HOLA_VERSION            release version to install (default: 1.1.3)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -14,7 +14,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-1.1.2}"
+VERSION="${HOLA_VERSION:-1.1.3}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -26,11 +26,6 @@ case "$MACHINE" in
     *) echo "Unsupported architecture: $MACHINE" >&2; exit 1 ;;
 esac
 
-SUDO=""
-if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-    SUDO="sudo"
-fi
-
 # Capture Termux's own $PREFIX (e.g. /data/data/com.termux/files/usr) before
 # install_tarball() below reassigns the (unrelated) global var of the same
 # name to our own install prefix.
@@ -39,6 +34,15 @@ IS_TERMUX=0
 if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux/files/usr" ]; then
     IS_TERMUX=1
     [ -n "$TERMUX_APP_PREFIX" ] || TERMUX_APP_PREFIX="/data/data/com.termux/files/usr"
+fi
+
+# Some Termux setups ship a "sudo" stub that isn't a real privilege
+# escalation tool - it just prints "No superuser binary detected. Are you
+# rooted?" and does nothing. Termux's own app storage is always fully
+# writable to its own uid, so sudo is never needed (or usable) there.
+SUDO=""
+if [ "$IS_TERMUX" != "1" ] && [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
 fi
 
 detect_linux_distro() {
@@ -447,7 +451,11 @@ install_tarball() {
         BIN_DIR="${HOME}/.local/bin"
     fi
 
-    if [ ! -w "$(dirname "$PREFIX")" ] || { [ -e "$PREFIX" ] && [ ! -w "$PREFIX" ]; }; then
+    # Termux ships a "sudo" stub on some setups that isn't a real privilege
+    # escalation tool - it just prints "No superuser binary detected. Are
+    # you rooted?" and does nothing. $PREFIX is always fully writable to
+    # the Termux app's own uid, so sudo is never needed (or usable) there.
+    if [ "$IS_TERMUX" != "1" ] && { [ ! -w "$(dirname "$PREFIX")" ] || { [ -e "$PREFIX" ] && [ ! -w "$PREFIX" ]; }; }; then
         if command -v sudo >/dev/null 2>&1; then
             SUDO="sudo"
         fi
