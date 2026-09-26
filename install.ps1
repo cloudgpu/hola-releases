@@ -13,7 +13,7 @@ param(
     [string]$InstallDir
 )
 
-if (-not $Version)      { $Version      = if ($env:HOLA_VERSION)      { $env:HOLA_VERSION }      else { '1.1.3' } }
+if (-not $Version)      { $Version      = if ($env:HOLA_VERSION)      { $env:HOLA_VERSION }      else { '1.1.4' } }
 if (-not $ReleasesRepo) { $ReleasesRepo = if ($env:HOLA_RELEASES_REPO) { $env:HOLA_RELEASES_REPO } else { 'cloudgpu/hola-releases' } }
 if (-not $InstallDir)   { $InstallDir   = if ($env:HOLA_INSTALL_DIR)  { $env:HOLA_INSTALL_DIR }  else { "$env:LOCALAPPDATA\hola" } }
 $Version = $Version.TrimStart('v')

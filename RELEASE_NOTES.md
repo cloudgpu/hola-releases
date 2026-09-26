@@ -1,4 +1,4 @@
-# Hola 1.1.3 Release Notes
+# Hola 1.1.4 Release Notes
 
 ## Windows builds are published again
 
