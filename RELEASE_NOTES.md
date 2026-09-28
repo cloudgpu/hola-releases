@@ -1,4 +1,4 @@
-# Hola 1.1.6 Release Notes
+# Hola 1.1.7 Release Notes
 
 ## Windows builds are published again
 
@@ -33,7 +33,7 @@ Install on Windows, in PowerShell:
   PowerShell line instead of the `curl | sh` one, with a link to switch
   platforms by hand.
 
-Released 2026-09-27.
+Released 2026-09-28.
 
 # Hola 1.0.9 Release Notes
 
