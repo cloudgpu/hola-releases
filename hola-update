@@ -137,14 +137,6 @@ update_via_pkg_manager() {
 
   if command -v dpkg >/dev/null 2>&1 && dpkg -s hola >/dev/null 2>&1; then
     local pkg="hola_${VERSION}_${TAR_ARCH}.deb"
-    local glibc
-    glibc=$(glibc_version)
-    if [ -n "$glibc" ] && [ "$(printf '%s\n2.38\n' "$glibc" | sort -V | head -n1)" = "$glibc" ] && [ "$glibc" != "2.38" ]; then
-      local legacy="hola_${VERSION}_${TAR_ARCH}-ubuntu20.04.deb"
-      if curl -fsSL "${BASE_URL}/${legacy}" -o "${TMPDIR}/${legacy}" 2>/dev/null; then
-        pkg="$legacy"
-      fi
-    fi
     echo "==> Hola update (apt/dpkg package: hola)"
     echo "    version : ${VERSION}"
     [ -f "${TMPDIR}/${pkg}" ] || curl -fsSL "${BASE_URL}/${pkg}" -o "${TMPDIR}/${pkg}"
@@ -272,6 +264,7 @@ for name in hola-admin hola-coder hola-prompt; do
   ln -sf "$target" "$link"
   echo "    linked $name"
 done
+[ -x "$PREFIX/bin/hola-laya-setup" ] && ln -sf "$PREFIX/bin/hola-laya-setup" "$BIN_DIR/hola-laya-setup"
 
 # Link hola-update into BIN_DIR. The freshly-downloaded tarball's own
 # hola-update was already installed to $PREFIX/bin/hola-update by the
@@ -459,6 +452,15 @@ if command -v hola-coder >/dev/null 2>&1; then
   else
     echo "    hola-coder tools: list failed (binary still runs?)" >&2
   fi
+fi
+
+LAYA_SETUP=""
+for c in "${PREFIX:-}/bin/hola-laya-setup" "$(command -v hola-laya-setup 2>/dev/null || true)" /opt/hola/bin/hola-laya-setup; do
+  [ -n "$c" ] && [ -x "$c" ] && { LAYA_SETUP="$c"; break; }
+done
+if [ -n "$LAYA_SETUP" ]; then
+  echo "==> Checking the Laya decision model..."
+  "$LAYA_SETUP" || echo "    Laya model download failed; run 'hola-laya-setup' when online." >&2
 fi
 
 echo

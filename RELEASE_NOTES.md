@@ -1,4 +1,83 @@
-# Hola 1.5.0 Release Notes
+# Hola 1.10.0 Release Notes
+
+## Prompts sized from the model profile, and caching that works
+
+* Profiles take `context_length` and `request_token_budget`. The per-request
+  prompt cap defaults to 16,000 tokens (never above the model's window); a
+  profile or `HOLA_REQUEST_TOKEN_BUDGET` raises or lowers it. Hot history,
+  pinned files, the conversation thread and the state frame are shares of that
+  budget, and small budgets scale the floors down instead of overrunning.
+* Spilling to the cold store happens in batches (down to 60% of the budget)
+  so the prompt prefix stays byte-identical between spills.
+* Prompt-cache breakpoints now sit on the last stable message. The per-turn
+  `§state` frame is marked `volatile_tail` and is never a breakpoint, so a
+  prefix is no longer written to the cache every request and never read back.
+  On Haiku 4.5 through OpenRouter a measured 8-call run served 68% of its
+  prompt from cache. Haiku will not cache a prefix under 4,096 tokens.
+* Anthropic `input_tokens` excludes cache reads and writes; the recorded
+  prompt size now includes them, so usage and budgets are correct.
+* Tool selection is frozen after the first build and tool-search leases last
+  32 turns, so the tool list (which precedes the messages) stops changing.
+
+## Streaming is real, thinking is separate
+
+* OpenAI-compatible and Responses streams are parsed as they arrive. Before,
+  every reasoning and text delta reached the console in one batch after the
+  whole HTTP response had finished.
+* Inline `<think>…</think>` (and a bare `…</think>`, or an unclosed
+  `<think>`) is split out of the answer before any tool-call extraction, so a
+  call drafted while thinking is never executed and thinking is not re-sent.
+* `hola-coder -i` shows the phase: `◌ waiting for model`, a live
+  `⋯ thinking 12s · ~330 tok`, `⚙ ran 1.2s` after each tool, and a closing
+  line with thought / worked / waited totals. The banner shows the wire API
+  (`chat completions`, `responses` or `anthropic messages`).
+
+## Reasoning
+
+* Adaptive reasoning: with a profile `reasoning_strength` and the local Laya
+  decision model available, a step that needs no deep thinking is lowered to
+  `reasoning_direct` (default `minimal`) for that request only.
+  `HOLA_ADAPTIVE_REASONING=0` turns it off.
+* One resolver sends the level on every API: `reasoning_effort` on Chat
+  Completions and `reasoning.effort` on Responses (which sent nothing before).
+* `disable_thinking` is documented for what it is: a prompt-template switch
+  for Qwen-style local models, not an API setting.
+
+## Plans and project roots
+
+* A saved plan appears in `§state` only after a plan tool has run in the
+  session (or the resumed history used one). A stale plan on disk is no
+  longer adopted and executed in response to "hi".
+* `/tmp`, `/var/tmp` and `/dev/shm` are never a project root, even with a
+  stray `.hola` in them.
+
+## Removed: small-model workarounds
+
+* The "I will / Let me" and short-"Done." reply detectors (including the
+  reasoning-field check), the plan-only nudge text, the `nudge_style`
+  variants and the model-name prompt blocks are gone. A reply is incomplete
+  only when it is empty. Profiles that still list `nudge_style` are fine; the
+  key is ignored. Text-tool-call parsers (xml, json, hermes, qwen) stay.
+
+## Platform builds
+
+* FreeBSD: the include path is no longer dropped after `override CFLAGS`,
+  the cancel flag is a `sig_atomic_t` (`long` on FreeBSD), and the HPL
+  tool-table tests initialize their table. `scripts/test-freebsd-build.sh`
+  runs a clean build and test on the VM.
+* Windows: the Laya plugin no longer trips `-Werror=address` on MSYS, where
+  `dli_fname` is an array. The vcpkg cache is now saved even when a later step
+  fails; a job that always failed after the ~25 minute ICU build never saved
+  it, which is why every run took so long.
+* Termux: ICU is installed for the Laya bridge.
+* macOS: `st_mtim` is portable (fixed after v1.9.0).
+* `scripts/full-release.sh` no longer waits for the Windows build; the
+  workflow verifies and uploads the zip itself. `HOLA_WAIT_WINDOWS=1`
+  restores the wait.
+
+Released 2026-10-02.
+
+# Hola 1.9.0 Release Notes
 
 ## Windows builds are published again
 
@@ -23,9 +102,11 @@ non-blocking, and expires after 7 days.
   for the small ones). That artifact, kept 90 days by default, is what
   filled the quota.
 
-Install on Windows, in PowerShell:
+Install on Windows, in PowerShell (download, read, then run; piping the
+script into `iex` trips antivirus heuristics):
 
-    irm https://cloudgpu.io/install.ps1 | iex
+    Invoke-WebRequest https://cloudgpu.io/install.ps1 -OutFile install.ps1
+    .\install.ps1
 
 ## Website
 
@@ -33,7 +114,7 @@ Install on Windows, in PowerShell:
   PowerShell line instead of the `curl | sh` one, with a link to switch
   platforms by hand.
 
-Released 2026-09-30.
+Released 2026-10-02.
 
 # Hola 1.0.9 Release Notes
 

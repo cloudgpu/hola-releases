@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 1.5.0)
+#   HOLA_VERSION            release version to install (default: 1.10.0)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -14,7 +14,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-1.5.0}"
+VERSION="${HOLA_VERSION:-1.10.0}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -321,19 +321,13 @@ install_deb() {
     local pkg="hola_${VERSION}_${DEB_ARCH}.deb"
     local url="${BASE_URL}/${pkg}"
 
-    # Older glibc containers/distros need the Ubuntu 20.04 (glibc 2.31) build.
+    # Packages are built on a recent glibc; older systems (e.g. Ubuntu 22.04,
+    # Debian 12) may fail to start with "GLIBC_2.xx not found".
     local glibc
     glibc=$(glibc_version)
     if [ -n "$glibc" ] && [ "$(printf '%s\n2.38\n' "$glibc" | sort -V | head -n1)" = "$glibc" ] && [ "$glibc" != "2.38" ]; then
-        local legacy_pkg="hola_${VERSION}_${DEB_ARCH}-ubuntu20.04.deb"
-        local legacy_url="${BASE_URL}/${legacy_pkg}"
-        echo "glibc ${glibc} detected; trying legacy package ${legacy_pkg}..."
-        if curl -fsSL "$legacy_url" -o "${TMPDIR}/${legacy_pkg}"; then
-            pkg="$legacy_pkg"
-            url="$legacy_url"
-        else
-            echo "Legacy package not available, falling back to standard package."
-        fi
+        echo "Warning: glibc ${glibc} is older than the glibc Hola is built against (2.38+)." >&2
+        echo "         The binaries may not start on this system." >&2
     fi
 
     echo "Downloading Debian package ${pkg}..."
@@ -556,6 +550,21 @@ case "$OS" in
         exit 1
         ;;
 esac
+
+# Fetch the local Laya decision model now (~800 MB, one time) so hola-coder
+# uses it from the very first run.
+LAYA_SETUP=$(command -v hola-laya-setup 2>/dev/null || true)
+[ -n "$LAYA_SETUP" ] || for d in /opt/hola/bin "${HOLA_INSTALL_PREFIX:-$HOME/.local/hola}/bin" "$HOME/.local/bin"; do
+    [ -x "$d/hola-laya-setup" ] && { LAYA_SETUP="$d/hola-laya-setup"; break; }
+done
+if [ -n "$LAYA_SETUP" ]; then
+    echo ""
+    echo "==> Setting up the Laya decision model"
+    "$LAYA_SETUP" || {
+        echo "Warning: Laya model download failed. Run 'hola-laya-setup' when online;" >&2
+        echo "         hola-coder will also retry it automatically on first use." >&2
+    }
+fi
 
 echo ""
 echo "Done."
