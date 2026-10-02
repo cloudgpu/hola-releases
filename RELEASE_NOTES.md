@@ -1,3 +1,28 @@
+# Hola 1.10.1 Release Notes
+
+## macOS and Termux builds ship again
+
+v1.10.0 shipped Linux, FreeBSD and Windows packages but not macOS or Termux:
+both failed building the Laya inference bridge, and every release package
+must include Laya.
+
+* macOS: Homebrew's ICU is keg-only, so CMake could not find it. The workflow
+  now installs `icu4c` and points CMake at it. The Laya setup tool also linked
+  with a GNU-only `--whole-archive`, which Apple's linker rejects; it now uses
+  the platform's flags.
+* Termux: the ICU bundling step needed `ldd`, which Termux does not have. It
+  now reads the library names from the ELF itself and fails loudly if an ICU
+  library the bridge needs is not in the package. `laya.so` links libcurl on
+  Android, where its symbols were not resolved through the executable.
+* Termux 32-bit arm is experimental (ggml's ARM code does not build for it)
+  and no longer cancels the arm64 job or fails the release.
+* The macOS and Termux workflows publish only from a version tag; a branch
+  test build can no longer create a release named after the branch.
+* CI: the AddressSanitizer job failed with `HOLA_BUILD_ID redefined`; the
+  recursive make no longer passes the define twice.
+
+Released 2026-10-02.
+
 # Hola 1.10.0 Release Notes
 
 ## Prompts sized from the model profile, and caching that works
