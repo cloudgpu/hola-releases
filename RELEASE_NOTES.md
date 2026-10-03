@@ -1,4 +1,4 @@
-# Hola 1.10.1 Release Notes
+# Hola 1.11.0 Release Notes
 
 ## macOS and Termux builds ship again
 
@@ -21,7 +21,7 @@ must include Laya.
 * CI: the AddressSanitizer job failed with `HOLA_BUILD_ID redefined`; the
   recursive make no longer passes the define twice.
 
-Released 2026-10-02.
+Released 2026-10-03.
 
 # Hola 1.10.0 Release Notes
 
