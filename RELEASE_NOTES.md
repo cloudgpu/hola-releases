@@ -1,4 +1,43 @@
-# Hola 1.12.0 Release Notes
+# Hola 1.13.0 Release Notes
+
+Includes everything v1.12.0 was cut with. Its macOS, Linux ARM64 and Termux
+builds were never produced, because the GitHub-hosted runners were refused over
+account billing; those platforms are built on local runners from this release.
+
+## hola-coder app-server
+
+* `hola-coder -d` runs a Codex-compatible app-server daemon: JSONL protocol,
+  persistent threads, a controller API, and forked threads whose history is
+  snapshotted without duplicating ancestor messages. Worker and approval
+  lifetimes are hardened, Codex skill input blocks are preserved, and a turn's
+  response is ordered before its streamed events.
+  See `foundation_apps/hola-coder/docs/app-server.md`.
+
+## Tool calling
+
+* Tools reach the model only through the provider's native `tools` field. The
+  system prompt no longer repeats tool names or hand-written argument
+  examples; required parameters are described in the tool schemas instead.
+* An invalid tool call is reported in its own tool result, not as an extra
+  user message that was replayed every turn. Failed results are flagged
+  (`is_error` on Anthropic), and a resumed session's state frame shows them as
+  `ERR` instead of `ok`.
+
+## Laya
+
+* Local decider questions go through one shared helper,
+  `hola_decision_question()`, instead of hand-built JSON at each call site.
+
+## Release infrastructure
+
+* The macOS release builds on the self-hosted Mac mini, and the Linux ARM64
+  and Termux releases on a local Docker runner (buildx + QEMU).
+* `full-release.sh` checks that every self-hosted release runner is online
+  before it changes anything (`HOLA_SKIP_RUNNER_CHECK=1` skips it).
+
+Released 2026-10-06.
+
+# Hola 1.11.0 Release Notes
 
 ## macOS and Termux builds ship again
 
@@ -21,7 +60,7 @@ must include Laya.
 * CI: the AddressSanitizer job failed with `HOLA_BUILD_ID redefined`; the
   recursive make no longer passes the define twice.
 
-Released 2026-10-06.
+Released 2026-10-03.
 
 # Hola 1.10.0 Release Notes
 
