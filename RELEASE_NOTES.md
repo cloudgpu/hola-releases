@@ -1,4 +1,4 @@
-# Hola 1.16.0 Release Notes
+# Hola 1.17.0 Release Notes
 
 Includes everything v1.12.0 was cut with. Its macOS, Linux ARM64 and Termux
 builds were never produced, because the GitHub-hosted runners were refused over
@@ -35,7 +35,7 @@ account billing; those platforms are built on local runners from this release.
 * `full-release.sh` checks that every self-hosted release runner is online
   before it changes anything (`HOLA_SKIP_RUNNER_CHECK=1` skips it).
 
-Released 2026-10-10.
+Released 2026-10-11.
 
 # Hola 1.11.0 Release Notes
 
