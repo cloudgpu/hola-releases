@@ -1,4 +1,4 @@
-# Hola 1.28.0 Release Notes
+# Hola 1.29.0 Release Notes
 
 Includes everything v1.12.0 was cut with. Its macOS, Linux ARM64 and Termux
 builds were never produced, because the GitHub-hosted runners were refused over
