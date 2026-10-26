@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/cloudgpu/hola-releases/main/install.sh | sh
 # Environment variables:
-#   HOLA_VERSION            release version to install (default: 1.27.0)
+#   HOLA_VERSION            release version to install (default: 1.28.0)
 #   HOLA_RELEASES_REPO      GitHub releases repo, e.g. cloudgpu/hola-releases
 #   HOLA_INSTALL_PREFIX     where to put /opt/hola contents for tar installs
 #   HOLA_BIN_DIR            where to symlink executables for tar installs
@@ -14,7 +14,7 @@
 
 set -e
 
-VERSION="${HOLA_VERSION:-1.27.0}"
+VERSION="${HOLA_VERSION:-1.28.0}"
 RELEASES_REPO="${HOLA_RELEASES_REPO:-cloudgpu/hola-releases}"
 BASE_URL="${HOLA_INSTALL_URL:-https://github.com/${RELEASES_REPO}/releases/download/v${VERSION}}"
 
@@ -564,6 +564,18 @@ if [ -n "$LAYA_SETUP" ]; then
         echo "Warning: Laya model download failed. Run 'hola-laya-setup' when online;" >&2
         echo "         hola-coder will also retry it automatically on first use." >&2
     }
+fi
+
+# Claude Code subagent / Codex skill that hand work to hola-coder, for the tools
+# installed here (HOLA_AGENT_SETUP=0 skips it).
+AGENT_SETUP=$(command -v hola-agent-setup 2>/dev/null || true)
+[ -n "$AGENT_SETUP" ] || for d in /opt/hola/bin "${HOLA_INSTALL_PREFIX:-$HOME/.local/hola}/bin" "$HOME/.local/bin"; do
+    [ -x "$d/hola-agent-setup" ] && { AGENT_SETUP="$d/hola-agent-setup"; break; }
+done
+if [ -n "$AGENT_SETUP" ] && [ "${HOLA_AGENT_SETUP:-1}" != "0" ]; then
+    echo ""
+    echo "==> Connecting Claude Code / Codex to hola-coder"
+    "$AGENT_SETUP" || echo "Warning: hola-agent-setup failed; run it again later." >&2
 fi
 
 echo ""
